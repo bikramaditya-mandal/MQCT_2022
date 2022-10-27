@@ -1,0 +1,10 @@
+#!/bin/bash
+
+rm MQCT_2022/*.o
+
+module purge;
+module load openmpi-geib-cuda10.2-intel/4.0.5 ;
+
+mpifort -c -g -traceback ./MQCT_2022/head.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./MQCT_2022/;
+mv *.mod ./MQCT_2022/;
