@@ -333,18 +333,18 @@
       i_curr = 1
       tot_number_of_traject = nmbr_of_traj
 !!! FOR MONTE CARLO NOT CHECK POINT OR IDENTICAL SYMMETRY LOOP	  
-      IF(monte_carlo_defined .and. check_point_defined) THEN
-      CALL READ_CHECK_POINT_MC
-      ENDIF	  
+      ! IF(monte_carlo_defined .and. check_point_defined) THEN
+      ! CALL READ_CHECK_POINT_MC
+      ! ENDIF	  
 !!! SETTING UP INTITAL CONDIONS	  
 !      PRINT*,myid,check_point_defined	  
-      IF(check_point_defined .and. .not. monte_carlo_defined) THEN
-      IF(MYID.EQ.0) PRINT*,"READING FROM CHECKPOINT STARTED"	  
-      CALL READ_CHECK_POINT	
-      IF(MYID.EQ.0) PRINT*,"READING FROM CHECKPOINT FINISHED"
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!      STOP 
-      ENDIF
+      ! IF(check_point_defined .and. .not. monte_carlo_defined) THEN
+      ! IF(MYID.EQ.0) PRINT*,"READING FROM CHECKPOINT STARTED"	  
+      ! CALL READ_CHECK_POINT	
+      ! IF(MYID.EQ.0) PRINT*,"READING FROM CHECKPOINT FINISHED"
+      ! CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+! !      STOP 
+      ! ENDIF
 !!! CHECKPOINT READING	
   
       DO i_ener=i_curr,nmbr_of_enrgs !!! LOOP OVER ENERGIES
@@ -478,72 +478,72 @@
 	  
 !!!! IF CHECKPOINT_SAVE DEFINED
       IF(write_check_file_defined .and. .not.monte_carlo_defined) THEN 
-      IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
-      m_t = 0!!! DEFINING HOW MANY DIFFERENT J12 and M12 WE have
-      j_t =  j_min_ind(chann_ini)	  
-      IF(.not.identical_particles_defined) THEN
-      i = indx_corr(m_t + j_t+1,
-     & j_t+1,chann_ini) 
-      ELSE
-      i = indx_corr_id(p_cur,m_t + j_t+1,
-     & j_t+1,chann_ini)
-      ENDIF
-      j_t =  j_max_ind(chann_ini)
-      m_t = j_t		  
-      IF(.not.identical_particles_defined) THEN
-      j = indx_corr(m_t + j_t+1,
-     & j_t+1,chann_ini) 
-      ELSE
-      j = indx_corr_id(ident_max,m_t + j_t+1,
-     & j_t+1,chann_ini) 	  
-      ENDIF	
-      num_ini_states = j - i	+ 1
-      ini_st_check_file = i
-      IF(s_ini.ne.ini_st_check_file .or. num_ini_states.le.0) THEN
-      IF(MYID.eq.0) PRINT*,"ERROR IN INITIALIZATION OF CHECK FILES"
-      IF(MYID.eq.0) PRINT*,"ERROR IN CHECK_FILE"      	  
-      STOP
-      ENDIF	  
-      IF (MYID.eq.0 ) THEN
-      num_chann_check_point = 	number_of_channels
-!!!  THAT IS WHAT WOULD BE WRITTERN IN CHECKPOINT
-      IF(.not.check_point_defined .or. i_ener.gt.i_curr) THEN	  
-      ALLOCATE(what_computed(num_ini_states,tot_number_of_traject))	  
-      ALLOCATE(      
-     & all_prob_l
-     & (sys_var_size+6,num_ini_states,tot_number_of_traject))
-      ALLOCATE(all_def_fnc(num_ini_states,tot_number_of_traject))
-      ALLOCATE(all_vib_fnc(num_ini_states,tot_number_of_traject))	  
-      ENDIF	  
- !!! CHECKPOINT ARRAYS	 
-      ALLOCATE(      
-     & sv_ch_prob_l
-     & (sys_var_size+6,num_ini_states,n_traject_alloc,nproc))
-      sv_ch_prob_l = 0d0
-      ALLOCATE(      
-     & sv_ch_what_computed
-     & (num_ini_states,n_traject_alloc,nproc))	  
-      sv_ch_what_computed  = 0
-      ALLOCATE(sv_ch_def_fnc(num_ini_states,n_traject_alloc,nproc))
-      sv_ch_def_fnc = 0
-      if(allocated(sv_ch_vib_fnc)) deallocate(sv_ch_vib_fnc)		!Bikram Oct'18.	  
-      ALLOCATE(sv_ch_vib_fnc(num_ini_states,n_traject_alloc,nproc))
-      sv_ch_vib_fnc = 0	 
-      ENDIF	  
-!!! ALL PROCESSORS ALLOCATE THESE BUFFER ARRAYS
+      ! IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
+      ! m_t = 0!!! DEFINING HOW MANY DIFFERENT J12 and M12 WE have
+      ! j_t =  j_min_ind(chann_ini)	  
+      ! IF(.not.identical_particles_defined) THEN
+      ! i = indx_corr(m_t + j_t+1,
+     ! & j_t+1,chann_ini) 
+      ! ELSE
+      ! i = indx_corr_id(p_cur,m_t + j_t+1,
+     ! & j_t+1,chann_ini)
+      ! ENDIF
+      ! j_t =  j_max_ind(chann_ini)
+      ! m_t = j_t		  
+      ! IF(.not.identical_particles_defined) THEN
+      ! j = indx_corr(m_t + j_t+1,
+     ! & j_t+1,chann_ini) 
+      ! ELSE
+      ! j = indx_corr_id(ident_max,m_t + j_t+1,
+     ! & j_t+1,chann_ini) 	  
+      ! ENDIF	
+      ! num_ini_states = j - i	+ 1
+      ! ini_st_check_file = i
+      ! IF(s_ini.ne.ini_st_check_file .or. num_ini_states.le.0) THEN
+      ! IF(MYID.eq.0) PRINT*,"ERROR IN INITIALIZATION OF CHECK FILES"
+      ! IF(MYID.eq.0) PRINT*,"ERROR IN CHECK_FILE"      	  
+      ! STOP
+      ! ENDIF	  
+      ! IF (MYID.eq.0 ) THEN
+      ! num_chann_check_point = 	number_of_channels
+! !!!  THAT IS WHAT WOULD BE WRITTERN IN CHECKPOINT
+      ! IF(.not.check_point_defined .or. i_ener.gt.i_curr) THEN	  
+      ! ALLOCATE(what_computed(num_ini_states,tot_number_of_traject))	  
+      ! ALLOCATE(      
+     ! & all_prob_l
+     ! & (sys_var_size+6,num_ini_states,tot_number_of_traject))
+      ! ALLOCATE(all_def_fnc(num_ini_states,tot_number_of_traject))
+      ! ALLOCATE(all_vib_fnc(num_ini_states,tot_number_of_traject))	  
+      ! ENDIF	  
+ ! !!! CHECKPOINT ARRAYS	 
+      ! ALLOCATE(      
+     ! & sv_ch_prob_l
+     ! & (sys_var_size+6,num_ini_states,n_traject_alloc,nproc))
+      ! sv_ch_prob_l = 0d0
+      ! ALLOCATE(      
+     ! & sv_ch_what_computed
+     ! & (num_ini_states,n_traject_alloc,nproc))	  
+      ! sv_ch_what_computed  = 0
+      ! ALLOCATE(sv_ch_def_fnc(num_ini_states,n_traject_alloc,nproc))
+      ! sv_ch_def_fnc = 0
+      ! if(allocated(sv_ch_vib_fnc)) deallocate(sv_ch_vib_fnc)		!Bikram Oct'18.	  
+      ! ALLOCATE(sv_ch_vib_fnc(num_ini_states,n_traject_alloc,nproc))
+      ! sv_ch_vib_fnc = 0	 
+      ! ENDIF	  
+! !!! ALL PROCESSORS ALLOCATE THESE BUFFER ARRAYS
  
-      ALLOCATE(sv_ch_prob_l_buffer(
-     & sys_var_size+6,num_ini_states,n_traject_alloc))
-      sv_ch_prob_l_buffer = 0d0
-      ALLOCATE(      
-     & sv_ch_what_computed_buffer
-     & (num_ini_states,n_traject_alloc))
-      sv_ch_what_computed_buffer  = 0
-      ALLOCATE(sv_ch_def_fnc_buffer(num_ini_states,n_traject_alloc))
-      ALLOCATE(sv_ch_vib_fnc_buffer(num_ini_states,n_traject_alloc))	  
-      sv_ch_def_fnc_buffer = 0
-      sv_ch_vib_fnc_buffer = 0	  
-      ALLOCATE(TRAJECT_DATA_CHECK_FILE(sys_var_size+6))
+      ! ALLOCATE(sv_ch_prob_l_buffer(
+     ! & sys_var_size+6,num_ini_states,n_traject_alloc))
+      ! sv_ch_prob_l_buffer = 0d0
+      ! ALLOCATE(      
+     ! & sv_ch_what_computed_buffer
+     ! & (num_ini_states,n_traject_alloc))
+      ! sv_ch_what_computed_buffer  = 0
+      ! ALLOCATE(sv_ch_def_fnc_buffer(num_ini_states,n_traject_alloc))
+      ! ALLOCATE(sv_ch_vib_fnc_buffer(num_ini_states,n_traject_alloc))	  
+      ! sv_ch_def_fnc_buffer = 0
+      ! sv_ch_vib_fnc_buffer = 0	  
+      ! ALLOCATE(TRAJECT_DATA_CHECK_FILE(sys_var_size+6))
       ELSE
       CALL DEFINE_WIDTH(s_ini)	  
       ENDIF		  
@@ -708,24 +708,24 @@
      & "TRAJECTORY DONE FOR L=",l_scatter(itraject,myid+1),
      & "TIME_SPENT=",t_prop,"SEC."
       endif	 
-      IF(write_check_file_defined) THEN!!!! SAVING THE DATA FROM TRAEJCTORY TO SAVE IT IN CHECK FILE
-      sv_ch_prob_l_buffer
-     & (:,s_st -ini_st_check_file + 1 ,itraject) = 
-     & TRAJECT_DATA_CHECK_FILE
-      sv_ch_def_fnc_buffer
-     & (s_st -ini_st_check_file + 1 ,itraject) =  loop_count	
-      sv_ch_vib_fnc_buffer
-     & (s_st -ini_st_check_file + 1 ,itraject) =  vibration_cnt 
-      IF(traj_run) THEN 
-      sv_ch_what_computed_buffer
-     & (s_st -ini_st_check_file + 1 ,itraject) = -1
-      ELSE
-      sv_ch_what_computed_buffer
-     & (s_st -ini_st_check_file + 1 ,itraject) = 1
-!      IF(MYID.eq.12) PRINT*,       sv_ch_what_computed_buffer
-!     & (s_st -ini_st_check_file + 1 ,itraject),	itraject 
-      ENDIF	  
-      ENDIF
+      ! IF(write_check_file_defined) THEN!!!! SAVING THE DATA FROM TRAEJCTORY TO SAVE IT IN CHECK FILE
+      ! sv_ch_prob_l_buffer
+     ! & (:,s_st -ini_st_check_file + 1 ,itraject) = 
+     ! & TRAJECT_DATA_CHECK_FILE
+      ! sv_ch_def_fnc_buffer
+     ! & (s_st -ini_st_check_file + 1 ,itraject) =  loop_count	
+      ! sv_ch_vib_fnc_buffer
+     ! & (s_st -ini_st_check_file + 1 ,itraject) =  vibration_cnt 
+      ! IF(traj_run) THEN 
+      ! sv_ch_what_computed_buffer
+     ! & (s_st -ini_st_check_file + 1 ,itraject) = -1
+      ! ELSE
+      ! sv_ch_what_computed_buffer
+     ! & (s_st -ini_st_check_file + 1 ,itraject) = 1
+! !      IF(MYID.eq.12) PRINT*,       sv_ch_what_computed_buffer
+! !     & (s_st -ini_st_check_file + 1 ,itraject),	itraject 
+      ! ENDIF	  
+      ! ENDIF
       CALL TIME_CHECKER(INTERUPT_PROPAGATION)
       IF(INTERUPT_PROPAGATION) THEN
       EXIT	  
@@ -1640,9 +1640,9 @@ c	 !!! EROR
       IF(id_proc.lt.tot_number_of_traject-traject_sum_lim*nproc)
      & traject_sum_lim = n_traject_alloc  
       ENDIF
-      IF(INTERUPT_PROPAGATION .and. write_check_file_defined) THEN
-      traject_sum_lim = min(id_trajec_mnt_crl-1,traject_sum_lim)      
-      ENDIF		  
+      ! IF(INTERUPT_PROPAGATION .and. write_check_file_defined) THEN
+      ! traject_sum_lim = min(id_trajec_mnt_crl-1,traject_sum_lim)      
+      ! ENDIF		  
 	  
       DO itraject=1,traject_sum_lim
       i = i + 1	  
@@ -2138,66 +2138,66 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO	  
 !   loops in case of orbiting
       loop_count = 0 
-      IF(check_point_defined .and. .not. monte_carlo_defined .and. 
-     & i_ener.eq. i_curr ) THEN
-      state_ch = s_st-ini_st_check_file+1
-      CALL TRAJ_ORB(INT(l_real),
-     & traj_ch,
-     & 1,
-     & dl_step_integ,
-     & ident_skip,
-     & L_MIN_TRAJECT)	  
-      SELECT CASE(what_computed(state_ch,traj_ch ))	  
-      CASE(1)
-      sys_var = all_prob_l(1:sys_var_size,state_ch,traj_ch)
-      loop_count = all_def_fnc(state_ch,traj_ch)
-	  vibration_cnt =  all_vib_fnc(state_ch,traj_ch)                   !!! DO NOT FORGET 
-      tcur = all_prob_l(sys_var_size+1,state_ch,traj_ch)
-      time_st = tcur	  
-      eror = all_prob_l(sys_var_size+2,state_ch,traj_ch)
-      current_error = all_prob_l(sys_var_size+3,state_ch,traj_ch)
-      deflect_angle = all_prob_l(sys_var_size+4,state_ch,traj_ch)
-      dt_corrected  = all_prob_l(sys_var_size+5,state_ch,traj_ch)
-      dt_step  = all_prob_l(sys_var_size+6,state_ch,traj_ch)
-      traj_run = .FALSE.
-      CASE(-1)
-      sys_var = all_prob_l(1:sys_var_size,state_ch,traj_ch)
-      loop_count = all_def_fnc(state_ch,traj_ch)
-	  vibration_cnt =  all_vib_fnc(state_ch,traj_ch)    !!! DO NOT FORGET 
-      tcur = all_prob_l(sys_var_size+1,state_ch,traj_ch)
-      time_st = tcur	  
-      eror = all_prob_l(sys_var_size+2,state_ch,traj_ch)
-      current_error = all_prob_l(sys_var_size+3,state_ch,traj_ch)
-      deflect_angle = all_prob_l(sys_var_size+4,state_ch,traj_ch)
-      dt_corrected  = all_prob_l(sys_var_size+5,state_ch,traj_ch)
-      dt_step  = all_prob_l(sys_var_size+6,state_ch,traj_ch)
-      def_angle2 = deflect_angle + 2d0*acos(-1d0)*loop_count	  
-!! REDEFINING ALL VALUES AGAIN	  
-      ort_r(1) = dcos(sys_var(5+states_size*2))
-     ^ *dsin(sys_var(3+states_size*2))
-      ort_r(2) = dsin(sys_var(5+states_size*2))
-     ^ *sin(sys_var(3+states_size*2)) 
-      ort_r(3) = dcos(sys_var(3+states_size*2))
-      ort_teta(1) = dcos(sys_var(5+states_size*2))
-     ^ *dcos(sys_var(3+states_size*2))
-      ort_teta(2) = dsin(sys_var(5+states_size*2))*
-     ^ dcos(sys_var(3+states_size*2)) 
-      ort_teta(3) = -dsin(sys_var(3+states_size*2))
-      ort_phi(1) = -dsin(sys_var(5+states_size*2))
-     % *dsin(sys_var(3+states_size*2))
-      ort_phi(2) = dcos(sys_var(5+states_size*2))
-     $ *dsin(sys_var(3+states_size*2)) 
-      ort_phi(3) =0d0
-! THE PROGRAM COPIES CLASSICAL VARIABLES FROM "sys_var" FOR FURTHER USE 	  
-      R =  sys_var(1+states_size*2)
-      pr =  sys_var(2+states_size*2)
-      ql = sys_var(3+states_size*2)
-      l = sys_var(4+states_size*2)
-      phi = sys_var(5+states_size*2)
-      qphi = sys_var(6+states_size*2)
-      CASE(0)
-      END SELECT
-      ENDIF
+      ! IF(check_point_defined .and. .not. monte_carlo_defined .and. 
+     ! & i_ener.eq. i_curr ) THEN
+      ! state_ch = s_st-ini_st_check_file+1
+      ! CALL TRAJ_ORB(INT(l_real),
+     ! & traj_ch,
+     ! & 1,
+     ! & dl_step_integ,
+     ! & ident_skip,
+     ! & L_MIN_TRAJECT)	  
+      ! SELECT CASE(what_computed(state_ch,traj_ch ))	  
+      ! CASE(1)
+      ! sys_var = all_prob_l(1:sys_var_size,state_ch,traj_ch)
+      ! loop_count = all_def_fnc(state_ch,traj_ch)
+	  ! vibration_cnt =  all_vib_fnc(state_ch,traj_ch)                   !!! DO NOT FORGET 
+      ! tcur = all_prob_l(sys_var_size+1,state_ch,traj_ch)
+      ! time_st = tcur	  
+      ! eror = all_prob_l(sys_var_size+2,state_ch,traj_ch)
+      ! current_error = all_prob_l(sys_var_size+3,state_ch,traj_ch)
+      ! deflect_angle = all_prob_l(sys_var_size+4,state_ch,traj_ch)
+      ! dt_corrected  = all_prob_l(sys_var_size+5,state_ch,traj_ch)
+      ! dt_step  = all_prob_l(sys_var_size+6,state_ch,traj_ch)
+      ! traj_run = .FALSE.
+      ! CASE(-1)
+      ! sys_var = all_prob_l(1:sys_var_size,state_ch,traj_ch)
+      ! loop_count = all_def_fnc(state_ch,traj_ch)
+	  ! vibration_cnt =  all_vib_fnc(state_ch,traj_ch)    !!! DO NOT FORGET 
+      ! tcur = all_prob_l(sys_var_size+1,state_ch,traj_ch)
+      ! time_st = tcur	  
+      ! eror = all_prob_l(sys_var_size+2,state_ch,traj_ch)
+      ! current_error = all_prob_l(sys_var_size+3,state_ch,traj_ch)
+      ! deflect_angle = all_prob_l(sys_var_size+4,state_ch,traj_ch)
+      ! dt_corrected  = all_prob_l(sys_var_size+5,state_ch,traj_ch)
+      ! dt_step  = all_prob_l(sys_var_size+6,state_ch,traj_ch)
+      ! def_angle2 = deflect_angle + 2d0*acos(-1d0)*loop_count	  
+! !! REDEFINING ALL VALUES AGAIN	  
+      ! ort_r(1) = dcos(sys_var(5+states_size*2))
+     ! ^ *dsin(sys_var(3+states_size*2))
+      ! ort_r(2) = dsin(sys_var(5+states_size*2))
+     ! ^ *sin(sys_var(3+states_size*2)) 
+      ! ort_r(3) = dcos(sys_var(3+states_size*2))
+      ! ort_teta(1) = dcos(sys_var(5+states_size*2))
+     ! ^ *dcos(sys_var(3+states_size*2))
+      ! ort_teta(2) = dsin(sys_var(5+states_size*2))*
+     ! ^ dcos(sys_var(3+states_size*2)) 
+      ! ort_teta(3) = -dsin(sys_var(3+states_size*2))
+      ! ort_phi(1) = -dsin(sys_var(5+states_size*2))
+     ! % *dsin(sys_var(3+states_size*2))
+      ! ort_phi(2) = dcos(sys_var(5+states_size*2))
+     ! $ *dsin(sys_var(3+states_size*2)) 
+      ! ort_phi(3) =0d0
+! ! THE PROGRAM COPIES CLASSICAL VARIABLES FROM "sys_var" FOR FURTHER USE 	  
+      ! R =  sys_var(1+states_size*2)
+      ! pr =  sys_var(2+states_size*2)
+      ! ql = sys_var(3+states_size*2)
+      ! l = sys_var(4+states_size*2)
+      ! phi = sys_var(5+states_size*2)
+      ! qphi = sys_var(6+states_size*2)
+      ! CASE(0)
+      ! END SELECT
+      ! ENDIF
 !      IF MPI TASKS PER TRAJECORY IS USED, THE DRAGGING MASTER PROC SPREADS OUT THE INTIAL CONSITION TO SLAVES 	  
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
@@ -3256,15 +3256,15 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(updated_R.gt.R_fin) traj_run = .FALSE.
 
 !!!! SAVING DATA IN CHEKPOINT
-      IF(write_check_file_defined .and. .not.monte_carlo_defined) THEN
-      TRAJECT_DATA_CHECK_FILE(1:sys_var_size) = sys_var
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+1) = tcur
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+2) = eror
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+3) = current_error
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+4) = deflect_angle
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+5) = dt_corrected
-      TRAJECT_DATA_CHECK_FILE(sys_var_size+6) = dt_step	  
-      ENDIF	  
+      ! IF(write_check_file_defined .and. .not.monte_carlo_defined) THEN
+      ! TRAJECT_DATA_CHECK_FILE(1:sys_var_size) = sys_var
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+1) = tcur
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+2) = eror
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+3) = current_error
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+4) = deflect_angle
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+5) = dt_corrected
+      ! TRAJECT_DATA_CHECK_FILE(sys_var_size+6) = dt_step	  
+      ! ENDIF	  
 !!!!! CHECK CURRENT TIME FOR CHECKPOINT	  
       IF(mpi_task_defined) THEN
       IF(int(myid/mpi_task_per_traject)*mpi_task_per_traject.eq.myid)
