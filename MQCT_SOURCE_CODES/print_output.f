@@ -45,23 +45,30 @@
 ! Bikram End.
       OPEN(1,FILE="CROSS_SECTIONS.out",POSITION="APPEND")
       DO i_u=i_curr, i_ener-1
-      WRITE(1,'(a3,1x,f10.3,1x,a5)') "U=",U(i_u),"cm^-1"
+      WRITE(1,'(a,f14.6,a)') "U= ",U(i_ener)," cm^-1"
       IF(.not.monte_carlo_defined) THEN	  
-      WRITE(1,'(a6,2x,a6,2x,a14,2x,a18)') 
-     & 'ilv','flv','E_coll(cm^-1)','cross sect.(ANG^2)'  
+      WRITE(1,'(2(a6,2x),a19,2x,a14,2x,a19)') 
+     & 'ilv', 'flv', 'sigma(U),ANG^2',
+     & 'E_coll,cm^-1', 'sigma(E_coll),ANG^2'
       DO i = 1,number_of_channels    	  
-      IF(bill_exst(i,i_u)) 
-     & WRITE(1,'(i6,2x,i6,2x,f14.3,2x,e18.10)') chann_ini, i,
-     &	  E_bill(i,i_u),sigma_f(i,i_u)	  
+      IF(bill_exst(i,i_u))
+     & WRITE(1,'(i6,2x,i6,2x,e19.10,2x,f14.6,2x,e19.10)') 
+     & chann_ini, i, sigma_f(i,i_u)/U(i_u)*E_bill(i,i_u), 
+     & E_bill(i,i_u), sigma_f(i,i_u)
       ENDDO
 	  
       ELSE
       WRITE(1,'(a6,2x,a6,2x,a14,2x,a18,1x,a19)')
      & 'ilv','flv','E_coll,cm^-1','cross sect.,ANG^2',
      & 'monte_carlo_error,%'  
+      WRITE(1,'(2(a6,2x),a19,2x,a14,2x,a19,2x,a19)') 
+     & 'ilv', 'flv', 'sigma(U),ANG^2',
+     & 'E_coll,cm^-1', 'sigma(E_coll),ANG^2', 
+     & 'monte_carlo_error,%'
       DO i = 1,number_of_channels    	  
       IF(bill_exst(i,i_u)) 
-     & WRITE(1,'(i6,2x,i6,2x,f14.3,2x,e18.10,10x,f10.4)')chann_ini,i,
+     & WRITE(1,'(i6,2x,i6,2x,e19.10,2x,f14.6,2x,e19.10,11x,f10.4)')
+     & chann_ini,i, sigma_f(i,i_u)/U(i_u)*E_bill(i,i_u), 
      & E_bill(i,i_u),sigma_f(i,i_u),monte_carlo_err(i,i_u)
       IF(mont_carlo_max(i_u).lt.monte_carlo_err(i,i_u)
      & .and.bill_exst(i,i_u))

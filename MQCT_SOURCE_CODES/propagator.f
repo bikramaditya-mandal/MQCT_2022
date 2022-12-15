@@ -1801,13 +1801,15 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram Start:
 	  if(myid.eq.0) then
 	  OPEN(1111,FILE="CROSS_SECTIONS.tmp",POSiTION="APPEND")
-      WRITE(1111,'(a,f0.3,a)') "U= ",U(i_ener)," cm^-1"
-      WRITE(1111,'(a6,2x,a6,2x,a14,2x,a18)') 
-     & 'ilv','flv','E_coll,cm^-1','cross sect.(ANG^2)'  
+      WRITE(1111,'(a,f14.6,a)') "U= ",U(i_ener)," cm^-1"
+      WRITE(1111,'(2(a6,2x),a19,2x,a14,2x,a19)') 
+     & 'ilv', 'flv', 'sigma(U),ANG^2',
+     & 'E_coll,cm^-1', 'sigma(E_coll),ANG^2'
       DO i = 1,number_of_channels    	  
       IF(bill_exst(i,i_ener)) 
-     & WRITE(1111,'(i6,2x,i6,2x,f14.3,2x,e18.10)') chann_ini, i,
-     &	  E_bill(i,i_ener),sigma_f(i,i_ener)	  
+     & WRITE(1111,'(i6,2x,i6,2x,e19.10,2x,f14.6,2x,e19.10)') 
+     & chann_ini, i, sigma_f(i,i_ener)/U(i_ener)*E_bill(i,i_ener), 
+     & E_bill(i,i_ener), sigma_f(i,i_ener)
       ENDDO
 ! Bikram Start May 2020:	  
 	  if(bk_nrg_err) then	  
