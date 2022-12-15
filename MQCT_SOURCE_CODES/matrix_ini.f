@@ -823,11 +823,12 @@ c     STOP
 	  integer, allocatable :: file_old(:,:), file_old1(:,:), cyc_cntr(:)
 	  real*8 MIJ_ZERO_CUT_old, mtrx_cutoff_chk1, mtrx_cutoff_chk2
 	  real*8 bk_tym1, bk_tym2, bk_tym
-	  integer load_cntr, dm11, dm_bgn, dm_end
+	  integer load_cntr, dm11, dm_bgn, dm_end, k_rstrt_chk, k_start
 	  character (len=500) :: load_file
 	  real*8, allocatable :: load_mij(:)
 	  logical cut_r, mpi_test_flag
       LOGICAL, ALLOCATABLE :: K_SKIPPED_BY_ROUTINE(:)
+      integer, allocatable :: bk_k_gather(:)
       LOGICAL :: K_SKIPPED_RES = .FALSE.
       LOGICAL BELONGS, bk_mtrx_re
       EXTERNAL BELONGS
@@ -934,7 +935,7 @@ c     STOP
       DO i=1,n_r_coll
       READ(23,*,IOSTAT=ISTAT) i_old,R_COM(i)
       ENDDO
-      R_COM = R_COM/conv_unit_r	  
+      R_COM = R_COM!/conv_unit_r	  				!This conversion has been disable because the file is always in Bohr unit
       CLOSE(23)
       IF(ISTAT.gt.0) STOP "ERROR:USER DEFINED R_GRID FILE NOT FOUND"
       ENDIF	
@@ -1060,9 +1061,11 @@ c     STOP
 	  if (print_matrix_defined .and. bikram_mij_multiprint) then
 	  if(allocated(Mat_el)) deallocate(Mat_el)
 	  if(allocated(Mat_el_der)) deallocate(Mat_el_der)
+	  if(.not.check_point_defined) then
 	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir1) )
 	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir2) )
 	  if(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir2) )
+	  end if
 	  if(bikram_rebalance) then
 	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir33) )
 	  if(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir33) )
@@ -1093,8 +1096,11 @@ c     STOP
 	  bk_non_zero_counter = 0
 	  allocate(bk_mat_temp1(n_r_coll,1000))
 	  allocate(bk_non_zero_mij_gather(nproc))
+	  if(write_check_file_defined .or. check_point_defined) 
+     & allocate(bk_k_gather(nproc))
 	  if(bikram_rebalance .or. bikram_rebalance_comp) 
      & allocate(cyc_cntr(1000))
+	  k_rstrt_chk = 0
 	  
 ! finding #r for matrix truncation
 	  if(.not.cut_r) then
@@ -1142,11 +1148,30 @@ c     STOP
 	  end do
 	  close(1)
 	  
+	  TIME_1_MAT = MPI_Wtime()
+	  if(myid.eq.0) call bk_print_matrix_info
+	  TIME_2_MAT = MPI_Wtime()
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	  
 	  bk_tym1 = MPI_Wtime()
 	  percent_counter = 1
 	  dm_bgn = load_mij(1)
 	  dm_end = load_mij(load_cntr)
-	  DO  dm11 = 1, load_cntr
+	  
+	  if(check_point_defined) then
+	  if(myid.eq.0) print*, "Matrix caculations restarting."
+	  open(11,file="Restart_info.DAT", action = 'read')
+	  do i = 1, myid+1
+	  read(11,*) k_rstrt_chk
+	  end do
+	  close(11)
+	  k_st_mpi = k_rstrt_chk
+	  if(k_st_mpi == 0) k_st_mpi = 1
+	  else
+	  k_st_mpi = 1
+	  end if
+	  
+	  DO  dm11 = k_st_mpi, load_cntr
 	  k = load_mij(dm11)
 
 ! Bikram Start: this is to print progress of matrix computation	  
@@ -1167,12 +1192,47 @@ c     STOP
       ENDDO
 	  cyc_cntr(bk_mat_counter) = k
 	  
+	  bgn_tym = MPI_Wtime()
 	  if(bk_mat_counter.eq.1000 .or. dm11.eq.load_cntr) then
+	  if(write_check_file_defined) then
+      if(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
 	  call bk_print_matrix (dm_bgn, dm_end, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
 	  bk_mat_counter = 0
+	  k_rstrt_chk = dm11 + 1
+	  else
+	  exit
 	  endif
+	  
+	  else
+	  call bk_print_matrix (dm_bgn, dm_end, k,
+     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
+	  bk_mat_counter = 0
+	  end if
+	  end if
+
+	  if(write_check_file_defined .and. 
+     & abs(bgn_tym-bk_tym1) > TIME_MIN_CHECK*60.d0) exit
       ENDDO
+	  
+	  if(write_check_file_defined .and. k_rstrt_chk < load_cntr) then
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_integer,bk_k_gather,1,
+     & MPI_integer,0,MPI_COMM_WORLD,ierr_mpi)
+	  if(myid.eq.0) then
+	  open(11,file="Restart_info.DAT")
+	  do i = 1, nproc
+	  write(11,*) bk_k_gather(i)
+	  end do
+	  close(11)
+	  write(*,'(a,a)')
+     & "Matrix calculations did not finish due to time limit. ",
+     & "Please restart. Program will stop now."
+	  end if
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      STOP
+	  end if
+	  
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  open(111, file = "Time_per_proc.out", access = 'append')
@@ -1211,10 +1271,6 @@ c     STOP
 	  call system ( "cp " // trim(bk_matrix_path5) )
 	  end if
 	  
-	  TIME_1_MAT = MPI_Wtime()
-	  if(myid.eq.0) call bk_print_matrix_info
-	  
-	  TIME_2_MAT = MPI_Wtime()
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       TIME_MAT_FINISH= MPI_Wtime()
@@ -1238,10 +1294,27 @@ c     STOP
 	  return
 	  end if
 	  
+	  TIME_1_MAT = MPI_Wtime()
+	  if(myid.eq.0) call bk_print_matrix_info
+	  TIME_2_MAT = MPI_Wtime()
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	  
 	  bk_tym1 = MPI_Wtime()
 ! Bikram Start: this is to print progress of matrix computation
 	  percent_counter = 1
-      DO  k=k_st_mpi,k_fn_mpi
+	  k_start = k_st_mpi
+	  if(check_point_defined) then
+	  if(myid.eq.0) print*, "Matrix caculations restarting."
+	  open(11,file="Restart_info.DAT", action = 'read')
+	  do i = 1, myid+1
+	  read(11,*) k_rstrt_chk
+	  end do
+	  close(11)
+	  k_start = k_rstrt_chk
+	  if(k_start == 0) k_start = k_st_mpi
+	  end if
+
+      DO  k = k_start, k_fn_mpi
 	  
 	  if((k-k_st_mpi).gt.int(chunk_mpi_size/10*percent_counter)) then
 	  bk_tym2 = MPI_Wtime()
@@ -1297,30 +1370,49 @@ c     STOP
       ENDDO
 	  end if
 	  
-!      IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
-!     & abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).LT.
-!     & MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
-!      bk_mat_temp1(:,bk_mat_counter) = 0d0
-!      mij_k_skip = .TRUE.	  
-!      ENDIF
-	  
-!	  IF(ABS(bk_mat_temp1(1,bk_mat_counter)).LT.MIJ_ZERO_CUT) THEN
-!	  if(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
-!     & abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).lt.
-!     & MIJ_ZERO_CUT) then
-!	  bk_non_zero_counter = bk_non_zero_counter + 1
-!      ENDIF	  
-	  
+	  bgn_tym = MPI_Wtime()
 	  if(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
-!	  bgn_tym = MPI_Wtime()											!Bikram
+	  if(write_check_file_defined) then
+      if(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
 	  call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
 	  bk_mat_counter = 0
-!	  end_tym = MPI_Wtime()											!Bikram
-	  endif
-!	  calc_tym = end_tym - bgn_tym									!Bikram
-!	  tot_tym_prn = tot_tym_prn + calc_tym							!Bikram
+	  k_rstrt_chk = k + 1
+	  else
+	  exit
+!	  end_tym = MPI_Wtime()
+!	  calc_tym = end_tym - bgn_tym
+!	  tot_tym_prn = tot_tym_prn + calc_tym
+	  end if
+	  
+	  else
+	  call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
+     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
+	  bk_mat_counter = 0
+	  end if
+	  end if
+	  
+	  if(write_check_file_defined .and. 
+     & abs(bgn_tym-bk_tym1) > TIME_MIN_CHECK*60.d0) exit
       ENDDO
+	  	  
+	  if(write_check_file_defined .and. k_rstrt_chk < k_fn_mpi) then
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_integer,bk_k_gather,1,
+     & MPI_integer,0,MPI_COMM_WORLD,ierr_mpi)
+	  if(myid.eq.0) then
+	  open(11,file="Restart_info.DAT")
+	  do i = 1, nproc
+	  write(11,*) bk_k_gather(i)
+	  end do
+	  close(11)
+	  write(*,'(a,a)')
+     & "Matrix calculations did not finish due to time limit. ",
+     & "Please restart. Program will stop now."
+	  end if
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      STOP
+	  end if
 	  
 	  if(bikram_rebalance) then
 	  bk_tym2 = MPI_Wtime()
@@ -1380,10 +1472,6 @@ c     STOP
 	  end if
 	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
-	  TIME_1_MAT = MPI_Wtime()
-	  if(myid.eq.0) call bk_print_matrix_info
-	  
-	  TIME_2_MAT = MPI_Wtime()
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       TIME_MAT_FINISH= MPI_Wtime()

@@ -823,7 +823,7 @@ c      intgrli  = intgrli+integrant*xbl*xgl*2d0*pi
 ! Bikram End.
 
       CALL V_POT_DIAT_DIAT(V,R,beta,bbeta,aalpha)
-      V_2_2(i3,i2,i1,i) = V 	  
+      V_2_2(i3,i2,i1,i) = V
 !      READ(1,*) V_2_2(i3,i2,i1,i)
       ENDDO
       ENDDO
@@ -5268,7 +5268,7 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       stp = ind_mat(1,k)
       stpp = ind_mat(2,k)	  
       SIMPLIFICATION_EXP_MAT = .FALSE.
-      	  
+	  if(bikram_rebalance) tmp1 = 0	  
 
       IF(.not.TERM_READ_STAT) THEN
       IF(MYID.eq.0 .and. fine_structure_defined) PRINT*, b_fine_coeff !!! DELETE       	  
@@ -6764,6 +6764,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & CG_in_all*!CG_j1_k1*
      & CG_j2_l2*
      & CG_j2_k2
+	  
+	  if(bikram_rebalance) tmp1 = tmp1 + 1
 !      ENDDO	  
 !      ENDDO
       ENDDO
@@ -6894,6 +6896,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
      & CG_j1_l1 * CG_j1_k1 * CG_j2_l2 * CG_j2_k2 *
      & coeff_1_p * coeff_1_pp
+	  
+	  if(bikram_rebalance) tmp1 = tmp1 + 1
       ENDDO	  
       ENDDO	  
       ENDDO
@@ -7052,7 +7056,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
      & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_in_all *
      & coeff_1_p*coeff_1_pp
-
+	  
+	  if(bikram_rebalance) tmp1 = tmp1 + 1
       ENDDO
       ENDDO
       ENDDO	  
@@ -7161,7 +7166,6 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       j1_pp_t = j1_ch(channpp)
       j2_pp_t = j2_ch(channpp)
 	  
-	  if(bikram_rebalance) tmp1 = 0
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ! This piece is to construct matrix for any molecule-molecule collision using expansion
 ! for more details follow MQCT 2022 manual
@@ -7466,8 +7470,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 	  if(stp.eq.stpp .and. j1_ch(channp).eq.j2_ch(channp) .and.
      & ka1_ch(channp).eq.ka2_ch(channp) .and. 
      & kc1_ch(channp).eq.kc2_ch(channp)) then
-      bk_par1 = bk_par1*((-1)**j12(stp))
-      bk_par2 = bk_par2*((-1)**j12(stpp))
+      bk_par1 = (-1)**j12(stp)
+      bk_par2 = (-1)**j12(stpp)
 	  end if
 ! Bikram End.
       par_p = parity_state(stp)
@@ -7527,7 +7531,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
       CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
      & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
       coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
@@ -7536,7 +7540,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       DO k2p =-j2_p_t,j2_p_t
       k2pp = k2p - nju2_t
       IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
@@ -7635,7 +7639,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
       CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
      & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
       coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
@@ -7644,7 +7648,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       DO k2p =-j2_p_t,j2_p_t
       k2pp = k2p - nju2_t
       IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
@@ -7739,7 +7743,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & bikram_w3j_fact)
       coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
       coeff_1_pp = 0d0       	  
       ENDIF	  
@@ -7750,7 +7754,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
       ELSE
       coeff_2_pp = 0d0       	  
       ENDIF
@@ -7847,7 +7851,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & bikram_w3j_fact)
       coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
       coeff_1_pp = 0d0       	  
       ENDIF	  
@@ -7858,7 +7862,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
       ELSE
       coeff_2_pp = 0d0       	  
       ENDIF
@@ -7950,20 +7954,20 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
       CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
      & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
       coeff_1_pp = 0d0       	  
       ENDIF	  
       DO k2p =-j2_p_t,j2_p_t
       k2pp = k2p - nju2_t
       IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
       ELSE
       coeff_2_pp = 0d0       	  
       ENDIF
@@ -8058,20 +8062,20 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
       CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
      & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
       IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
       ELSE
       coeff_1_pp = 0d0       	  
       ENDIF	  
       DO k2p =-j2_p_t,j2_p_t
       k2pp = k2p - nju2_t
       IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
       IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
       ELSE
       coeff_2_pp = 0d0       	  
       ENDIF
@@ -8112,7 +8116,6 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       M_coulp = M_coulp/
      & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
      & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
-   	  
       ENDIF	 	  
 	  
       END SELECT 	  

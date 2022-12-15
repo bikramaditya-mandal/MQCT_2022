@@ -2920,8 +2920,7 @@ c      PRINT*,time_lim
       CHARACTER(LEN=9) :: n_taject_word="NMB_TRAJ="		        			!CASE(23)
       CHARACTER(LEN=12):: mpi_proc_word="MPI_PERTRAJ="          			!CASE(24)
       CHARACTER(LEN=8):: continue_word="RESTART="               			!CASE(25)
-      CHARACTER(LEN=12)::  time_lim_check_file_word = 			
-     & "CHECK_POINT="                                           			!CASE(26)
+      CHARACTER(LEN=12):: time_lim_check_file_word="CHECK_POINT="           !CASE(26)
       CHARACTER(LEN=12):: monte_carlo_word="MONTE_CARLO="       			!CASE(27)
       CHARACTER(LEN=13):: calc_elast_word="CALC_ELASTIC="       			!CASE(28)
       CHARACTER(LEN=3)  :: delta_l_step_word  = "DL="	        			!CASE(29)
@@ -4268,7 +4267,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       CHARACTER(LEN=9)	:: bk_equ_sym1 = "EQU_SYM1="							!CASE(54) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym2 = "EQU_SYM2="							!CASE(55) 	   		!Bikram Sep 2022
       CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE="							!CASE(56) 	   		!Bikram Oct 2022
-      CHARACTER(LEN=12)	:: bk_reblnc_comp = "REBLNC_COMP="						!CASE(56) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=12)	:: bk_reblnc_comp = "REBLNC_COMP="						!CASE(57) 	   		!Bikram Oct 2022
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN

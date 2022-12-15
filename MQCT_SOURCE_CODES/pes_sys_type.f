@@ -37,11 +37,11 @@
       END SUBROUTINE V_POT_TOP_ATOM
 	  
 !!!! SYS_TYPE 5	  
-      SUBROUTINE V_POT_DIAT_DIAT(V,R,beta,bbeta,gamma) !!INPUT: beta,bbeta - theta 1,2 , gamma - phi 
+      SUBROUTINE V_POT_DIAT_DIAT(V,R,beta,bbeta,aalpha) !!INPUT: beta,bbeta - theta 1,2 , gamma - phi 
       IMPLICIT NONE
-      REAL*8 V,R,beta,bbeta,gamma
+      REAL*8 V,R,beta,bbeta,aalpha
       EXTERNAL USER_DEFINED_PES	  
-      CALL USER_DEFINED_PES(V,R,0d0,0d0,0,beta,gamma,0d0,bbeta,0d0)	  
+      CALL USER_DEFINED_PES(V,R,0d0,0d0,0,beta,aalpha,0d0,bbeta,0d0)	  
       END SUBROUTINE V_POT_DIAT_DIAT	  
 	  
 !!!! SYS_TYPE 6	!! INPUT: SAME AS SYS 5, BUT r_vib1 and r_vib2 - vibrational distances

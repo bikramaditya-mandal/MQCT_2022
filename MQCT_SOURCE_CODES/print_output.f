@@ -56,7 +56,7 @@
       ENDDO
 	  
       ELSE
-      WRITE(1,'(a3,2x,a3,2x,a13,2x,a17,1x,a19)') 
+      WRITE(1,'(a6,2x,a6,2x,a14,2x,a18,1x,a19)')
      & 'ilv','flv','E_coll,cm^-1','cross sect.,ANG^2',
      & 'monte_carlo_error,%'  
       DO i = 1,number_of_channels    	  
@@ -77,10 +77,10 @@
       ENDIF	 
       ENDIF	  
 
-! Bikram Start May 2020:	  
-	  if(bk_nrg_err) then	  
+! Bikram Start May 2020:
       WRITE(1,'(a28,1x,e12.5)') "TOTAL P CONSERVATION ERROR,%",
-     & error_prb_largest(i_u)
+     & error_prb_largest(i_u)	  
+	  if(bk_nrg_err) then
       WRITE(1,'(a28,1x,e12.5)') "TOTAL E CONSERVATION ERROR,%",
      &	error_ener_largest(i_u)
       WRITE(1,*)
