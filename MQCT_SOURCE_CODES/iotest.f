@@ -418,6 +418,7 @@ c! VARIABLES
 	  character(len = *),parameter :: bk_dir33 = "REBALANCE_FILES/"								!Bikram
 	  character (len=500) :: bk_matrix_path11, bk_dir1, bk_dir2									!Bikram
       CHARACTER(LEN=:), ALLOCATABLE :: label
+	  character(len = *),parameter :: bk_dir44 = "CHK_FILES"									!Bikram
       END MODULE VARIABLES	  
       SUBROUTINE INITIALIZATION
 ! READING INPUT FILE.

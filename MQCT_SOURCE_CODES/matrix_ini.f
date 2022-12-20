@@ -6904,7 +6904,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 	  SUBROUTINE bk_print_matrix(bk_n1, bk_n2, 
      & bk_nn, bk_ncount, bk_mat_array, mat_chk, tmp1)
+!--------------------------------------------------------------------
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
+! This subroutine is called after 1000 matrix elements are computed
+! and are ready to be stored in the file.
+!--------------------------------------------------------------------
       USE CONSTANTS	  
       USE VARIABLES
       USE MPI	  
@@ -6998,7 +7002,15 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 	  SUBROUTINE bk_read_matrix(bk_nn,
      & bk_mat_array, bk_ind_mat)
-! This subroutine is created by Bikramaditya Mandal, Nov 2020
+! This subroutine is created by Bikramaditya Mandal, Nov 2020 
+! to read matrix files for PARALLEL_IO input
+!--------------------------------------------------------------------
+! Parallel_IO matrix calculations involve 4 major files. All these files 
+! are in directory "MATRIX_TRUNCATED". One type starts with "Ind_*", and 
+! another type with "MIJ_*". The number of these files are equal to number of procs.
+! Two other important file names are MATRIX_FILE_INDEX.DAT and MATRIX_NONZERO_INDEX.DAT
+!--------------------------------------------------------------------
+
       USE CONSTANTS	  
       USE VARIABLES
       USE MPI	  
@@ -7020,17 +7032,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  character (len=9) :: dm7
 	  character (len=15) :: dm8
 	  logical bk_exst
-	  
+
+
 	  if(myid.eq.0) write(*,*)"Parallel Matrix Reading Started"
-	  
+!--------------------------------------------------------------------
+! Read information about the PARALLEL_IO output performed during the previous run
+!--------------------------------------------------------------------
 	  write(bk_dir_temp_1, '(a,a)') trim(bk_dir2),
      & "/MATRIX_NONZERO_INDEX.DAT"
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  open(1,file = bk_dir_temp_2, action = 'read')
-	  read(1,'(a9,i16)') dm7, file_counter
-	  read(1,'(a28,i16)') dm5, bk_non_zero_counter_old
-	  read(1,'(a21,e19.12)') dm6, MIJ_ZERO_CUT_old
+	  read(1,'(a9,i16)') dm7, file_counter										! total number of files of Ind* and MIJ*
+	  read(1,'(a28,i16)') dm5, bk_non_zero_counter_old							! total number of non-zero matrix elemnts
+	  read(1,'(a21,e19.12)') dm6, MIJ_ZERO_CUT_old								! cut-off value used for truncation of this matrix
 	  read(1,*)
+!--------------------------------------------------------------------
+! Check whether the cut-off value is corect. If not, then stop.
+!--------------------------------------------------------------------
 	  if(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
 	  print*, "The truncated Matrix does not match the Cut-Off Value."
 	  print*, "Please check and provide correct truncated Matrix."
@@ -7038,6 +7056,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  stop
 	  return
 	  end if
+!--------------------------------------------------------------------
+! Read the number of non-zero matrix elements in each individual MIJ_* file
+!--------------------------------------------------------------------
 	  allocate(nmb_m(file_counter))
 	  do ii = 1, file_counter
 	  read(1,'(3(i16,2x))') dm2, nmb_m(ii)
@@ -7047,13 +7068,19 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  end if
 	  end do
 	  close(1)
-	  
+!--------------------------------------------------------------------
+! Computing the number of non-zero matrix elements needed to read 
+! by each procs depending on MPI_PERTRAJ
+!--------------------------------------------------------------------
 	  wrk_id = myid - int(myid/mpi_task_per_traject)
      & *mpi_task_per_traject
 	  bk_nz = bk_non_zero_counter_old/mpi_task_per_traject
 	  if(wrk_id.lt.mod(bk_non_zero_counter_old,
      & mpi_task_per_traject)) bk_nz = bk_nz + 1
-	  
+!--------------------------------------------------------------------
+! Read information about which matrix elements are stored in each file
+! Check that the info is consistent. If not, then stop
+!--------------------------------------------------------------------
 	  write(bk_dir_temp_1, '(a,a)') trim(bk_dir2),
      & "/MATRIX_FILE_INDEX.DAT"
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
@@ -7064,6 +7091,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  print*, "#Files do not match in matrix directories"
 	  stop
 	  end if
+!--------------------------------------------------------------------
+! Read indices for first and last matrix elements stored in this file
+!--------------------------------------------------------------------
 	  allocate(file_nmb_bgn(file_counter),file_nmb_end(file_counter))
 	  do ii = 1, file_counter
 	  read(1,'(3(i16,2x))') dm2, file_nmb_bgn(ii), file_nmb_end(ii)
@@ -7073,11 +7103,13 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  end if
 	  end do
 	  close(1)
-	  
+!--------------------------------------------------------------------
+! Now each procs detrermines which files it should read, and which part of each file
+!--------------------------------------------------------------------	  
 	  proc_start = 1
 	  if(wrk_id.gt.0) then
 	  do ii = 0, wrk_id-1
-	  bk_dm = bk_non_zero_counter_old/mpi_task_per_traject
+	  bk_dm = bk_non_zero_counter_old/mpi_task_per_traject							! determines the size of the chunk of the total matrix it needs to read
 	  if(ii.lt.mod(bk_non_zero_counter_old,
      & mpi_task_per_traject)) bk_dm = bk_dm + 1
 	  proc_start = proc_start + bk_dm
@@ -7085,22 +7117,22 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  end if
 	  
 	  bk_st = 0
-	  do ii = 1, file_counter
+	  do ii = 1, file_counter														! determines how many files contain that information
 !	  if(bk_st.ge.file_nmb_bgn(ii) .and. 
 !     & bk_st.le.file_nmb_end(ii)) then
 !      file_nmb1 = ii
 !	  exit
 !	  end if
-	  bk_st = bk_st + nmb_m(ii)
+	  bk_st = bk_st + nmb_m(ii)														
 	  if(bk_st.ge.proc_start) then
-      file_nmb1 = ii
+      file_nmb1 = ii																! determine the number where the reading starts by each procs
 !	  bk_dm1 = bk_st - (proc_start - 1)
 	  exit
 	  end if
 	  end do   
 
 	  dm1 = 0
-	  if(wrk_id.gt.0)  then
+	  if(wrk_id.gt.0)  then															
 	  if(file_nmb1.gt.1) then	  
 	  bk_dm1 = 0
 	  do ii = 1, file_nmb1-1
@@ -7121,14 +7153,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !	  end if
 	  bk_st = bk_st + nmb_m(ii)
 	  if(bk_st.ge.proc_start+bk_nn-1) then
-      file_nmb2 = ii
+      file_nmb2 = ii																! determine the number where the reading ends by each procs
 	  exit
 	  end if
 	  end do
 	  file_nmb = file_nmb2 - file_nmb1 + 1
 	  st_store = 0   
 	  
-	  do jj = 1, file_nmb
+	  do jj = 1, file_nmb															! using start and end numbers make the file names to read
 	  write(bk_dir_temp_1, '(a,a,i0,a,i0,a)') trim(bk_dir2),
      & '/MIJ_', file_nmb_bgn(jj - 1 + file_nmb1),'_',
      & file_nmb_end(jj - 1 + file_nmb1),'.DAT'
@@ -7137,7 +7169,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & '/Ind_', file_nmb_bgn(jj - 1 + file_nmb1),'_',
      & file_nmb_end(jj - 1 + file_nmb1),'.DAT'
 	  bk_dir_temp_4 = trim(bk_dir_temp_3)
-	  
+!--------------------------------------------------------------------
+! This is the actual reading of the matrix elements by individual processors
+!--------------------------------------------------------------------	  
 	  if(jj.eq.1) then
 	  
 	  if(.not.unformat_defined) then

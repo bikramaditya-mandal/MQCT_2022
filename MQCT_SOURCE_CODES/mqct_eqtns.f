@@ -138,13 +138,16 @@
 	  real*8,allocatable :: bk_sin_cos(:,:)			
 ! Bikram End.
       EXTERNAL delta,BELONGS,round
-	   
+
+
+!--------------------------------------------------------------------
+! Store the values of R and Theta and their derivatives as local variables
+!--------------------------------------------------------------------
       dqdt=0d0
       Rrr = q(2*states_size+1)
       tet = q(2*states_size+3)
       sin_tet = dsin(tet)
       cos_tet = dcos(tet)
-	  
 ! Bikram Start Dec 2019:
 	  dThetadT = 0.d0
 	  if(bikram_theta) then
@@ -152,48 +155,66 @@
      % /q(2*states_size+1)/q(2*states_size+1)/massAB_M
 	  endif
 ! Bikram End.
-
       dPhidT = q(2*states_size+6)
      % /q(2*states_size+1)/q(2*states_size+1)/massAB_M/
      & sin_tet**2	  
       rphase = 1d0
       iphase = 0d0
-	  
+!--------------------------------------------------------------------
+! Allocate a working array, bk_mat, for the RHS calculations
+!--------------------------------------------------------------------
 ! Bikram Start Dec 2019:
 	  allocate(bk_mat(mat_sz_bk),bk_der_mat(mat_sz_bk))
 	  allocate(bk_amp_phi(mat_sz_bk),bk_amp_theta(mat_sz_bk))
 	  bk_amp_phi = 0.d0
 	  if(bikram_theta) bk_amp_theta = 0.d0
-	  call potential_data_bk(Rrr,bk_mat,bk_der_mat)
+!--------------------------------------------------------------------
+! Computes all Matrix elements, and their derivative at this value of R
+! and stores in the working array
+!--------------------------------------------------------------------
+	  call potential_data_bk(Rrr, bk_mat, bk_der_mat)
 ! Bikram End.
-	  
+!--------------------------------------------------------------------
+! Computes phase factors
+!--------------------------------------------------------------------
 	  allocate(bk_sin_cos(2,ph_cntr_bk))
 	  do k= 1,ph_cntr_bk
 	  bk_sin_cos(1,k) = dsin(t*bk_delta_E(k))
 	  bk_sin_cos(2,k) = dcos(t*bk_delta_E(k))
 	  enddo
-	  
-      DO k =1,mat_sz_bk
+!--------------------------------------------------------------------
+! Loop over the matrix elements for each processor to prepare another 
+! working array, bk_amp_phi and bk_amp_theta, for the RHS calculations
+!--------------------------------------------------------------------
+      DO k = 1, mat_sz_bk
       i = ind_mat_bk(1,k)
-      j = ind_mat_bk(2,k)
-	  
+      j = ind_mat_bk(2,k)  
+!--------------------------------------------------------------------
+! Skipping if parity of the state is different from the initial state parity
+!--------------------------------------------------------------------	  
 	  if(identical_particles_defined .and. ini_st_ident) then
 	  if(((-1)**(bk_parity-1)).ne.parity_state(i)) cycle
 	  end if
-!	  if(t.eq.0) write(*,'(a,2x,i0,2x,i0,2x,i0,2x,i0,2x,i0,2x,i0)')
-!     & 'pp', k, i, j, parity_state(i), parity_state(j), bk_parity
-	 
+!--------------------------------------------------------------------
+! Skipping if coupled state approx defined
+!--------------------------------------------------------------------
 	  if(coupled_states_defined) then
-	  if(m12(s_st).ne.m12(i)) cycle												!Skipping if coupled state approx defined
+	  if(m12(s_st).ne.m12(i)) cycle
 	  endif
-	  
+!--------------------------------------------------------------------
+! Skipping states indicated in the input file
+!--------------------------------------------------------------------  
       IF(states_to_exclude_defined) THEN
       IF(stts_to_excl(i) .or. stts_to_excl(j)) CYCLE
       ENDIF
-	  
+!--------------------------------------------------------------------
+! Store matrix element and its derivative as local variables
+!--------------------------------------------------------------------	  
       aver_poten_temp_0 = bk_mat(k)							
-	  der_aver_poten_temp_0 = bk_der_mat(k)					
-	  
+	  der_aver_poten_temp_0 = bk_der_mat(k)
+!--------------------------------------------------------------------
+! Computing phase factor for this transition
+!--------------------------------------------------------------------	  
 	  d_f = 2d0
       if(i.eq.j) d_f = 1d0
 	  tmp_indx = bk_indx(k)
@@ -201,7 +222,9 @@
       rphase = bk_sin_cos(2,tmp_indx)
       rfact_phase = -d_f*iphase
       ifact_phase = d_f*rphase
-
+!--------------------------------------------------------------------
+! Computing R.H.S. of quantum equations of motion by accumulation
+!--------------------------------------------------------------------
        dqdt(i) = dqdt(i)
      & + (q(j)*rfact_phase + q(j+states_size)*ifact_phase)	 
      &   *aver_poten_temp_0/2d0
@@ -217,12 +240,16 @@
       dqdt(j+states_size) = dqdt(j+states_size)
      & - (q(i+states_size)*rfact_phase + q(i)*ifact_phase)	 
      &   *aver_poten_temp_0/2d0
-	   	  
+!--------------------------------------------------------------------
+! Computing R.H.S. of classical equation for P_R by accumulation
+!--------------------------------------------------------------------
       dqdt(states_size*2+2) = dqdt(states_size*2+2)
      ^ - ((q(i)*q(j) + q(i+states_size)*q(j+states_size))*rphase
      ^ - (q(i+states_size)*q(j) - q(i)*q(j+states_size))*iphase)
      ^   *d_f*der_aver_poten_temp_0
-	  
+!--------------------------------------------------------------------
+! Coriolis Coupling
+!--------------------------------------------------------------------
 	  if(.not. coupled_states_defined) then										!Skipping if coupled state approx defined
 	  
       j_12 = j12(j)  
@@ -243,8 +270,11 @@
       ELSE
       s0 = 2*states_size+7
       s00 = 2*states_size+8	
-      ENDIF		
-	  
+      ENDIF
+!--------------------------------------------------------------------
+! To compute Coriolis coupling term for P_Phi and P_Theta and store 
+! in the working array bk_amp_phi and bk_amp_theta
+!--------------------------------------------------------------------	 
       bk_amp_phi(k) = bk_amp_phi(k)
      & - sin_tet*rfact_phase/2d0*
      &     (misc_bk(1,k)*(q(i)*q(s1) + q(i+states_size)*q(s11)) + 
@@ -252,7 +282,6 @@
      & - sin_tet*(-ifact_phase)/2d0*
      &     (misc_bk(1,k)*(q(i+states_size)*q(s1) - q(i)*q(s11)) + 	 
      & 	      misc_bk(2,k)*(q(i+states_size)*q(s0) - q(i)*q(s00)))
-	 
 ! Bikram Start Dec 2019:
 	  if(bikram_theta) then
 	  bk_amp_theta(k) = bk_amp_theta(k)
@@ -265,7 +294,6 @@
 	  endif
 ! Bikram End.
 	 
-
       j_12 = j12(i)  
       m_12 = m12(j)  
       m1 = m_12+1
@@ -285,7 +313,10 @@
       s0 = states_size*2+7
       s00 = states_size*2+8
       ENDIF
-	
+!--------------------------------------------------------------------
+! To compute rest of the RHS of equation for P_Phi and P_Theta and store 
+! in the working array bk_amp_phi and bk_amp_theta
+!--------------------------------------------------------------------	 	
       bk_amp_phi(k) = bk_amp_phi(k)
      & - sin_tet*(-rfact_phase)/2d0*	 
      &     (misc_bk(3,k)*(q(s1)*q(j) + q(s11)*q(j+states_size)) +	 
@@ -295,8 +326,6 @@
      & - sin_tet*(-ifact_phase)/2d0*	 
      &     (misc_bk(3,k)*(q(s1)*q(j+states_size) - q(s11)*q(j)) + 	 
      & 	      misc_bk(4,k)*(q(s0)*q(j+states_size) - q(s00)*q(j)))
-	 
-
 ! Bikram Start Dec 2019:
 	  if(bikram_theta) then
 	  bk_amp_theta(k) = bk_amp_theta(k)
@@ -310,19 +339,18 @@
      & 	      misc_bk(4,k)*(q(s0)*q(j+states_size) - q(s00)*q(j)))
 	  endif
 ! Bikram End.
-
 	  endif																		!finishing if loop for coupled state approx.
-   
       ENDDO
 	  
 	  if(.not. coupled_states_defined) then										!Skipping if coupled state approx defined
-	  
-	  !computation of RHS of P_phi and P_theta
+!--------------------------------------------------------------------
+! RHS as a scalar product of two working arrays that 
+! takes care of triple sum over n, n', and m
+!--------------------------------------------------------------------
 	  dqdt(states_size*2+6) = dot_product(bk_mat, bk_amp_phi)				
 	  if(bikram_theta) then
 	  dqdt(states_size*2+4) = dot_product(bk_mat, bk_amp_theta)			
 	  endif
-	  
 	  endif																		!finishing if loop for coupled state approx.
    
       DO i=1,traject_roots	  
@@ -339,7 +367,7 @@
 	   
 	  if(.not. coupled_states_defined) then										!Skipping if coupled state approx defined
 	  
-	  if(bikram_theta) then								!for spin-rot calculation
+	  if(bikram_theta) then														!for spin-rot calculation
 	  
 	  do i=1,states_size
 	  
@@ -408,28 +436,29 @@
       ENDDO
 	  
 	  endif
-	  
 	  endif																		!finishing if loop for coupled state approx.
-	  
-      dqdt(2*states_size+1) = q(2*states_size+2)/massAB_M
-      dqdt(2*states_size+5) = q(2*states_size+6)
+!--------------------------------------------------------------------
+! The RHS of equations for R, Phi, and Theta
+! and the remaining pieces of equations P_Theta and P_Phi
+!--------------------------------------------------------------------	  
+      dqdt(2*states_size+1) = q(2*states_size+2)/massAB_M						! For R
+      dqdt(2*states_size+5) = q(2*states_size+6)								! For Phi
      % /q(2*states_size+1)/q(2*states_size+1)/massAB_M/
      & sin_tet**2	 
 
-      dqdt(states_size*2+2)= dqdt(states_size*2+2)	   
+      dqdt(states_size*2+2)= dqdt(states_size*2+2)	   							! For P_R
      ^ +q(states_size*2+4)/q(states_size*2+1)
      & /q(states_size*2+1)/massAB_M*
      & q(states_size*2+4)/q(states_size*2+1)+
      ^ q(states_size*2+6)/q(states_size*2+1)
      & /q(states_size*2+1)/massAB_M*
      & q(states_size*2+6)/q(states_size*2+1)/sin_tet**2
- 
 ! Bikram Start Dec 2019: 
-	  if(bikram_theta) then
+	  if(bikram_theta) then														! For Theta
       dqdt(2*states_size+3) = q(2*states_size+4)
      % /q(2*states_size+1)/q(2*states_size+1)/massAB_M
 	 
-       dqdt(states_size*2+4)=dqdt(states_size*2+4)
+       dqdt(states_size*2+4)=dqdt(states_size*2+4)								! For P_Theta
      ^ +q(states_size*2+6)/q(states_size*2+1)
      & /q(states_size*2+1)/massAB_M*
      & q(states_size*2+6)
@@ -679,7 +708,12 @@
 	  REAL*8,allocatable :: bk_mat(:)
 	  real*8 sqrt1,sqrt2						
 	  real*8,allocatable :: bk_sin_cos(:,:)	
-      
+
+
+!--------------------------------------------------------------------
+! Information for classical DOF are obtained by interpolation of 
+! Adiabatic Trajectory data computed previously
+!--------------------------------------------------------------------
 	  call splint(bk_adia_t, bk_sys_var(:,1), bk_sys_var_der(:,1), 
      & bk_adia_n, t, Rrr, yprm(1))
 	  call splint(bk_adia_t, bk_sys_var(:,3), bk_sys_var_der(:,3), 
@@ -692,7 +726,11 @@
 	  dThetadT = 0.d0
 	  if(bikram_theta) dThetadT = ptet/ Rrr/ Rrr/ massAB_M
       dPhidT = pphi/ Rrr/ Rrr/ massAB_M/ sin_tet**2	
-	  
+!--------------------------------------------------------------------
+! This part of the code is simillar to the CC-MQCT DERIVS_BK subroutine
+! See comments there.
+! Except that CS-MQCT approximation is not available within AT-MQCT
+!--------------------------------------------------------------------	  
       dqdt=0d0
 	  rphase = 1d0
       iphase = 0d0

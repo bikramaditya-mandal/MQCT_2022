@@ -157,8 +157,8 @@
       USE MPI
       USE ERRORS	  
       USE MONTE_CARLO_STORAGE	  
-	  use bk_l_values												!Bikram Feb 2021
-	  use monte_carlo_sampling										!Bikram Sept 2021
+	  use bk_l_values															!Bikram Feb 2021
+	  use monte_carlo_sampling													!Bikram Sept 2021
 	  use iso_fortran_env,only:output_unit
       IMPLICIT NONE
       LOGICAL sampl_succ	  
@@ -166,11 +166,11 @@
       INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER
       INTEGER l_counter,round 
       REAL*8 delta,rand0,MIDDLE_NUM
-	  integer temp_l_counter			!Bikram
-	  real*8 temp_t_bfr_dotrjct,temp_t_afr_dotrjct,t_prop			!Bikram
+	  integer temp_l_counter										    		!Bikram
+	  real*8 temp_t_bfr_dotrjct,temp_t_afr_dotrjct,t_prop			    		!Bikram
 	  real*8 prop_time_bgn, prop_time_end, prop_time
 	  real*8, allocatable :: bk_probab_J(:,:), bk_probab_J_all(:,:,:)
-	  logical if_l			!Bikram
+	  logical if_l																!Bikram
 	  
 ! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
 	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2
@@ -179,12 +179,18 @@
 	  integer, allocatable :: bk_s_st(:)
 	  real*8, allocatable :: bk_l_real(:)
 	  real*8 J_tot, l_real
-	  logical belongs, mc_same_traj, mc_traj_file_exst
+	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
+	  character (len = 100) :: chk_files_name
+	  integer :: chk_file_unit = 123123
 	  external belongs
 ! BIkram End. 
-	  
       EXTERNAL delta,rand0,KRONEKER,round
+	  
+	  
+!--------------------------------------------------------------------
+! MPI initilization
+!--------------------------------------------------------------------
       mpi_task_per_proc = mpi_task_defined
       sys_var_size = 8+states_size*2 	!!!! INTIALIZNG  
       IF(mpi_task_per_proc) mpi_traject = mpi_task_per_traject
@@ -227,14 +233,15 @@
       ALLOCATE(err_traj_max_ener(nmbr_of_enrgs))
       ALLOCATE(err_traj_max_prb(nmbr_of_enrgs))
       ALLOCATE( monte_carlo_err(number_of_channels,nmbr_of_enrgs))
-	  reduce_nmb_traj = .false.			!Bikram
-	  if_l = .false.			!Bikram
+	  reduce_nmb_traj = .false.												!Bikram
+	  if_l = .false.														!Bikram
 	  transfer_prob_spln = .false.
 	  if(bk_prob_interpolation) transfer_prob_spln = .true.
 
-      ERROR_INDEX_ENERGY = 0d0	  
-!!! SETTING UP INTITAL CONDIONS	
-!!! BILLING SETUP
+      ERROR_INDEX_ENERGY = 0d0
+!--------------------------------------------------------------------
+! Billing energy calculations for all transitions and all energies
+!--------------------------------------------------------------------
       DO k=1,nmbr_of_enrgs
       DO j=1,number_of_channels
       dE_bllng = E_ch(j) - E_ch(chann_ini)
@@ -247,7 +254,9 @@
      & + dE_bllng**2/16d0/U(k)
       ENDDO
       ENDDO
-	  
+!--------------------------------------------------------------------
+! Create file to print resonance trajectories informations
+!--------------------------------------------------------------------
 ! Bikram Oct'18 Start:
       IF(orbit_traj_defined) then
 	  if(myid.eq.0) then
@@ -257,21 +266,24 @@
       endif
       endif
 ! Bikram End
-  
-!!! END BILLING SETUP
+!--------------------------------------------------------------------
+! Decides the value of j12 and m12 of the initial channel to print trajectory
+!--------------------------------------------------------------------
       IF(prn_l_defined) THEN
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
       IF(j12m12_print(1).lt.0) THEN
       IF(coll_type.gt.4 .or. coll_type.eq.0) THEN	  
       j12m12_print(1) = max(j1_ch(chann_ini),j2_ch(chann_ini))
-      j12m12_print(2) = 0    	  
+      j12m12_print(2) = 0
       ELSE
-      j12m12_print(2) = 0 
       j12m12_print(1) = j_ch(chann_ini)	  
+      j12m12_print(2) = 0
       ENDIF	  
       ENDIF	  
       ENDIF
-!! THIS IS OK?	  
+!--------------------------------------------------------------------
+! Setting up initial conditions
+!--------------------------------------------------------------------
       error_ener_largest = 0d0
       error_prb_largest = 0d0
       monte_carlo_err = 0d0	  
@@ -281,9 +293,6 @@
       E_coll = U/eVtown/autoeV
       s_ini = chann_indx(chann_ini)
       ini_channel = chann_ini
-!      PRINT*, nproc,myid
-!      STOP		  
-!      CALL U_V_INI
       ident_max = 1
 	   
       IF(identical_particles_defined) THEN
@@ -332,6 +341,9 @@
       time_st = 0d0
       i_curr = 1
       tot_number_of_traject = nmbr_of_traj
+!--------------------------------------------------------------------
+! Old Monte-Carlo checkpointing. Disabled by Bikram
+!--------------------------------------------------------------------
 !!! FOR MONTE CARLO NOT CHECK POINT OR IDENTICAL SYMMETRY LOOP	  
       ! IF(monte_carlo_defined .and. check_point_defined) THEN
       ! CALL READ_CHECK_POINT_MC
@@ -346,12 +358,37 @@
 ! !      STOP 
       ! ENDIF
 !!! CHECKPOINT READING	
-  
-      DO i_ener=i_curr,nmbr_of_enrgs !!! LOOP OVER ENERGIES
-      E_sct = E_coll(i_ener)
-!!! NUMBER OF TRAJECTORIES PER TASK
-      IF(monte_carlo_defined) THEN
 
+!--------------------------------------------------------------------
+! LOOP OVER ENERGIES
+!--------------------------------------------------------------------
+      DO i_ener = i_curr, nmbr_of_enrgs
+!--------------------------------------------------------------------
+! Creating directory to store checkpoint files
+!--------------------------------------------------------------------
+	  if(write_check_file_defined) then
+	  inquire(file = trim(bk_dir44), exist = chk_files_exst)
+	  if(chk_files_exst) call system ( "rm -r " // trim(bk_dir44) )
+	  call system ( "mkdir -p " // trim(bk_dir44) )
+	  write(chk_files_name, '(a,a,i0,a)') trim(bk_dir44), 
+     & "/Proc_ID_", myid, ".dat"
+	  chk_files_name = trim(chk_files_name)
+	  open(newunit = chk_file_unit, file = trim(chk_files_name))
+	  end if
+	  if(check_point_defined) then
+	  write(chk_files_name, '(a,a,i0,a)') trim(bk_dir44), 
+     & "/Proc_ID_", myid, ".dat"
+	  chk_files_name = trim(chk_files_name)
+	  open(newunit = chk_file_unit, file = trim(chk_files_name))
+	  end if
+      E_sct = E_coll(i_ener)
+!--------------------------------------------------------------------
+! Computes the number of trajectories per procs group
+!--------------------------------------------------------------------  
+      IF(monte_carlo_defined) THEN
+!--------------------------------------------------------------------
+! This is the case of Monte-Carlo
+!--------------------------------------------------------------------  
       ident_max  = 1		  
       IF(check_point_defined .and. i_curr.eq.i_ener) THEN
       tot_number_of_traject = nmbr_of_traj - tot_number_to_cut
@@ -381,7 +418,9 @@
      & "TOTAL NUMBER OF TRAJECTORIES",tot_number_of_traject
 	 
       ELSE
-!!!! IF NOT MONTE CARLO DEFINED	  
+!--------------------------------------------------------------------
+! For regular calculations, it computes the total number of trajectories
+!--------------------------------------------------------------------  
       IF(b_impact_defined) THEN
       J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
      & -j_max_ind(chann_ini)	  ! DB change 8/23
@@ -453,10 +492,11 @@
       IF(MYID.EQ.0) WRITE(*,*)
      & "TOTAL NUMBER OF TRAJECTORIES",tot_number_of_traject	  
       ENDIF
-	  
+!--------------------------------------------------------------------
+! This is to check if #trajectories < (nproc/mpi_pertraj)
+! In this case, the code would stop propagation with an error message
+!--------------------------------------------------------------------    
 ! Bikram Jan 2020 Start:
-	  !This is to check if #trajectories < (nproc/mpi_pertraj)
-	  !In this case, the code would stop propagation with an error message
 	  if(tot_number_of_traject.lt.(nproc/mpi_traject)) then
 	  if(myid.eq.0) then
       write(*,*)' '
@@ -477,25 +517,28 @@
 ! Bikram End.
 	  
 !!!! IF CHECKPOINT_SAVE DEFINED
-      IF(write_check_file_defined .and. .not.monte_carlo_defined) THEN 
+      IF(write_check_file_defined .and. .not.monte_carlo_defined) THEN
+!--------------------------------------------------------------------
+! Old Monte-Carlo checkpointing. Disabled by Bikram
+!--------------------------------------------------------------------
       ! IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
       ! m_t = 0!!! DEFINING HOW MANY DIFFERENT J12 and M12 WE have
       ! j_t =  j_min_ind(chann_ini)	  
       ! IF(.not.identical_particles_defined) THEN
       ! i = indx_corr(m_t + j_t+1,
-     ! & j_t+1,chann_ini) 
+      ! & j_t+1,chann_ini) 
       ! ELSE
       ! i = indx_corr_id(p_cur,m_t + j_t+1,
-     ! & j_t+1,chann_ini)
+      ! & j_t+1,chann_ini)
       ! ENDIF
       ! j_t =  j_max_ind(chann_ini)
       ! m_t = j_t		  
       ! IF(.not.identical_particles_defined) THEN
       ! j = indx_corr(m_t + j_t+1,
-     ! & j_t+1,chann_ini) 
+      ! & j_t+1,chann_ini) 
       ! ELSE
       ! j = indx_corr_id(ident_max,m_t + j_t+1,
-     ! & j_t+1,chann_ini) 	  
+      ! & j_t+1,chann_ini) 	  
       ! ENDIF	
       ! num_ini_states = j - i	+ 1
       ! ini_st_check_file = i
@@ -510,19 +553,19 @@
       ! IF(.not.check_point_defined .or. i_ener.gt.i_curr) THEN	  
       ! ALLOCATE(what_computed(num_ini_states,tot_number_of_traject))	  
       ! ALLOCATE(      
-     ! & all_prob_l
-     ! & (sys_var_size+6,num_ini_states,tot_number_of_traject))
+      ! & all_prob_l
+      ! & (sys_var_size+6,num_ini_states,tot_number_of_traject))
       ! ALLOCATE(all_def_fnc(num_ini_states,tot_number_of_traject))
       ! ALLOCATE(all_vib_fnc(num_ini_states,tot_number_of_traject))	  
       ! ENDIF	  
  ! !!! CHECKPOINT ARRAYS	 
       ! ALLOCATE(      
-     ! & sv_ch_prob_l
-     ! & (sys_var_size+6,num_ini_states,n_traject_alloc,nproc))
+      ! & sv_ch_prob_l
+      ! & (sys_var_size+6,num_ini_states,n_traject_alloc,nproc))
       ! sv_ch_prob_l = 0d0
       ! ALLOCATE(      
-     ! & sv_ch_what_computed
-     ! & (num_ini_states,n_traject_alloc,nproc))	  
+      ! & sv_ch_what_computed
+      ! & (num_ini_states,n_traject_alloc,nproc))	  
       ! sv_ch_what_computed  = 0
       ! ALLOCATE(sv_ch_def_fnc(num_ini_states,n_traject_alloc,nproc))
       ! sv_ch_def_fnc = 0
@@ -533,11 +576,11 @@
 ! !!! ALL PROCESSORS ALLOCATE THESE BUFFER ARRAYS
  
       ! ALLOCATE(sv_ch_prob_l_buffer(
-     ! & sys_var_size+6,num_ini_states,n_traject_alloc))
+      ! & sys_var_size+6,num_ini_states,n_traject_alloc))
       ! sv_ch_prob_l_buffer = 0d0
       ! ALLOCATE(      
-     ! & sv_ch_what_computed_buffer
-     ! & (num_ini_states,n_traject_alloc))
+      ! & sv_ch_what_computed_buffer
+      ! & (num_ini_states,n_traject_alloc))
       ! sv_ch_what_computed_buffer  = 0
       ! ALLOCATE(sv_ch_def_fnc_buffer(num_ini_states,n_traject_alloc))
       ! ALLOCATE(sv_ch_vib_fnc_buffer(num_ini_states,n_traject_alloc))	  
@@ -625,20 +668,23 @@
      & "TIME IT TOOK TO SETUP ARRAYS, s",
      & int(TIME_BUFFER-TIME_PROPAGATE)	 
       ENDIF	  
-!!!! STATES LOOP	  
-      DO p_parity = p_cur,ident_max !!! LOOP OVER PARITIES
-!	  if(p_parity.ne.2) cycle
-      IF(.not.monte_carlo_defined) THEN !!! NON_MONTECARLO LOOP
-!!!! INTEGER L VALUES	  
-      DO j_t = j_cur,j_max_ind(chann_ini)
-!	  if(j_t.ne.4) cycle
+!--------------------------------------------------------------------
+! Loop over the two values of exchange parity
+!--------------------------------------------------------------------
+      DO p_parity = p_cur,ident_max
+      IF(.not.monte_carlo_defined) THEN 								! NON_MONTECARLO LOOP
+!--------------------------------------------------------------------
+! This is loop over j12
+!--------------------------------------------------------------------
+      DO j_t = j_cur, j_max_ind(chann_ini)
       j_int_ini = j_t
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN
       j_curr_f = j_t+0.5d0	  
       ENDIF
-	  
-      DO m_t = m_cur,j_t
-!	  if(m_t.ne.2) cycle
+!--------------------------------------------------------------------
+! This is loop over m12
+!--------------------------------------------------------------------
+      DO m_t = m_cur, j_t
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN
       m_curr_f = m_cur+0.5d0
       IF(MYID.eq.0) WRITE(*,'(a27,1x,f4.1)')
@@ -659,16 +705,23 @@
       s_st = indx_corr_id(p_parity,m_t + j_t+1,
      & j_t+1,chann_ini) 	  
       ENDIF
-!	  print *, 's_st', s_st, myid
-      IF(s_st.ne.0) THEN !!! BIG CONDTION FOR NON_ZERO STATE
-!!! SETTING UP TRAJECTORY
+!--------------------------------------------------------------------
+! Checks whether the initial state is defined correctly or not
+!--------------------------------------------------------------------
+      IF(s_st.ne.0) THEN
+!--------------------------------------------------------------------
+! The piece below regarding CS-MQCT is not currently working
+!--------------------------------------------------------------------
       IF(coupled_states_defined 
 !!     & .and.(.not.mpi_task_per_proc)       !!! 531
      & .and. (.not.term_pot_defined) .and. .FALSE.) THEN 
       IF(MYID.eq.0 .and. s_st.eq.s_ini)	
      & PRINT*,"IMPROVED CS WILL BE USED" 
       CALL CS_MATRIX_IDENT	  
-      ENDIF		  
+      ENDIF
+!--------------------------------------------------------------------
+! Setting up trajectories
+!--------------------------------------------------------------------
       total_probab = 0d0
       sigma = 0d0
       probab_J = 0d0
@@ -678,7 +731,6 @@
       ampl_wf_imag = 0d0
       phase_wf = 0d0
       angle_scatter = 0d0
-	  
 ! Bikram Start:
       bk_tym = 0d0
       bk_prd = 0d0
@@ -694,11 +746,15 @@
       IF(identical_particles_defined)THEN
       parity_st = parity_state(s_st)
       ENDIF	  
-	  
-	  bk_parity = p_parity					!Bikram Nov 2020
-	  
-      DO itraject=st_traject,ntraject  !!! TRAJECTORY LOOP
+	  bk_parity = p_parity														!Bikram Nov 2020
+!--------------------------------------------------------------------
+! This is loop over trajectories
+!--------------------------------------------------------------------
+      DO itraject=st_traject,ntraject
 	  temp_t_bfr_dotrjct=MPI_Wtime()
+!--------------------------------------------------------------------
+! Dotraject is the actual trajectory propagation subroutine
+!--------------------------------------------------------------------
       CALL DOTRAJECT
       IF((myid/mpi_traject)*mpi_traject.eq.myid .and. .not.traj_run)
      & then
@@ -708,29 +764,32 @@
      & "TRAJECTORY DONE FOR L=",l_scatter(itraject,myid+1),
      & "TIME_SPENT=",t_prop,"SEC."
       endif	 
+!--------------------------------------------------------------------
+! Old Monte-Carlo checkpointing. Disabled by Bikram
+!--------------------------------------------------------------------
       ! IF(write_check_file_defined) THEN!!!! SAVING THE DATA FROM TRAEJCTORY TO SAVE IT IN CHECK FILE
       ! sv_ch_prob_l_buffer
-     ! & (:,s_st -ini_st_check_file + 1 ,itraject) = 
-     ! & TRAJECT_DATA_CHECK_FILE
+      ! & (:,s_st -ini_st_check_file + 1 ,itraject) = 
+      ! & TRAJECT_DATA_CHECK_FILE
       ! sv_ch_def_fnc_buffer
-     ! & (s_st -ini_st_check_file + 1 ,itraject) =  loop_count	
+      ! & (s_st -ini_st_check_file + 1 ,itraject) =  loop_count	
       ! sv_ch_vib_fnc_buffer
-     ! & (s_st -ini_st_check_file + 1 ,itraject) =  vibration_cnt 
+      ! & (s_st -ini_st_check_file + 1 ,itraject) =  vibration_cnt 
       ! IF(traj_run) THEN 
       ! sv_ch_what_computed_buffer
-     ! & (s_st -ini_st_check_file + 1 ,itraject) = -1
+      ! & (s_st -ini_st_check_file + 1 ,itraject) = -1
       ! ELSE
       ! sv_ch_what_computed_buffer
-     ! & (s_st -ini_st_check_file + 1 ,itraject) = 1
-! !      IF(MYID.eq.12) PRINT*,       sv_ch_what_computed_buffer
-! !     & (s_st -ini_st_check_file + 1 ,itraject),	itraject 
+      ! & (s_st -ini_st_check_file + 1 ,itraject) = 1
+      ! !      IF(MYID.eq.12) PRINT*,       sv_ch_what_computed_buffer
+      ! !     & (s_st -ini_st_check_file + 1 ,itraject),	itraject 
       ! ENDIF	  
       ! ENDIF
       CALL TIME_CHECKER(INTERUPT_PROPAGATION)
       IF(INTERUPT_PROPAGATION) THEN
       EXIT	  
       ENDIF	  
-	  
+
 !!!   GATHERING PROBABILTIES FROM ALL TRAJECTORIES
       DO i=1,number_of_channels		  
       probab_J(i,itraject) = probab(i)
@@ -753,7 +812,7 @@
 !!!!! STOP TRAJECTORY LOOP
 !!!! WAITING FOR ALL OTHER PROCESSORS	 
       TIME_DOTRAJECT = MPI_Wtime()
-!!!! SAVING DATA IN CHECKPOINT	  
+!!!! SAVING DATA IN CHECKPOINT
       CALL TIME_CHECKER(INTERUPT_PROPAGATION)
       IF(INTERUPT_PROPAGATION) THEN
       IF(MYID.EQ.0) PRINT*, 
@@ -815,53 +874,8 @@
 	  call flush(output_unit)
       TIME_BUFFER = TIME_DOTRAJECT	 
       ENDIF
-	  
-!	  print *, 'starting', myid
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  
-!	  write(*,'(a,1x,i0,1x,i0,1x,i0,1x,i0)')'check',
-!     & myid, number_of_channels, n_traject_alloc, nproc
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
-!      if(.not.allocated(bk_probab_J))
-!     & allocate(bk_probab_J(number_of_channels,n_traject_alloc))		  
-!      if(.not.allocated(bk_probab_J_all)) allocate(bk_probab_J_all
-!     & (number_of_channels,n_traject_alloc,nproc))	  
-!      allocate(bk_probab_J(number_of_channels,n_traject_alloc))
-!	  write(*,'(a,1x,i0,1x,L1)') 'allocate1',myid,
-!     & allocated(bk_probab_J)
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  allocate(bk_probab_J_all
-!     & (number_of_channels,n_traject_alloc,nproc))
-!	  write(*,'(a,1x,i0,1x,L1)') 'allocate2',myid,
-!     & allocated(bk_probab_J_all)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  bk_probab_J(:,:) = 0.d0!probab_J(:,:)
-!	  write(*,'(a,1x,i0,1x,i0,1x,i0,1x,i0)')'reached0', myid, 
-!     & size(probab_J), size(probab_J_all), task_size	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-	 
-!	  CALL MPI_GATHER(bk_probab_J,number_of_channels*n_traject_alloc,
-!     & MPI_DOUBLE_PRECISION,bk_probab_J_all,
-!     & number_of_channels*n_traject_alloc,MPI_DOUBLE_PRECISION,0,
-!     & MPI_COMM_WORLD,ierr_mpi)
-!	  write(*,'(a,1x,i0,1x,i0,1x,i0,1x,i0)')'reached1', myid, 
-!     & size(probab_J), size(probab_J_all), task_size	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	 
-!	  CALL MPI_BCAST(bk_probab_J_all, 
-!     & number_of_channels*n_traject_alloc*nproc, 
-!     &  MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)	 
-!	  write(*,'(a,1x,i0,1x,i0,1x,i0,1x,i0)')'reached2', myid, 
-!     & size(probab_J), size(probab_J_all), task_size	  
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	
-	  
-!!!!   GATHERING DATA : MAXIMUM ENERGY	 
+	 	  
+!!!!   GATHERING DATA to determine the MAXIMUM ENERGY Error
       CALL MPI_GATHER(num_traj_ener,1,MPI_INTEGER,
      & ERROR_INDEX_ENERGY,
      &	  1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr_mpi)
@@ -941,49 +955,34 @@
       CALL MPI_GATHER(err_id_prb,1,MPI_DOUBLE_PRECISION,
      & err_prb_larg,
      &	  1,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)	 
-c      PRINT*, "GATHER DONE ENDED"	 
-
-!	  write(*,'(i0,1x,l1,1x,i0,1x,i0)') myid, allocated(probab_J_all),
-!     & size(probab_J_all), task_size*nproc
+!      PRINT*, "GATHER DONE ENDED"	 
+!--------------------------------------------------------------------
+! Broadcasting the trajectory information after gathering
+!--------------------------------------------------------------------
       CALL MPI_BCAST(probab_J_all, task_size*nproc, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi) 	
-!	  print*, myid, 'probab_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
+     &  MPI_COMM_WORLD,ierr_mpi)
       CALL MPI_BCAST(angle_scatter, n_traject_alloc*nproc, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	
-!	  print*, myid, 'angle_scatter_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-
+     &  MPI_COMM_WORLD,ierr_mpi)
 ! Bikram Start:
       CALL MPI_BCAST(bk_tym, n_traject_alloc*nproc, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-!	  print*, myid, 'bk_tym_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
 	  
 	  CALL MPI_BCAST(bk_prd, n_traject_alloc*nproc, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-!	  print*, myid, 'bk_prd_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
 	 
 	  CALL MPI_BCAST(bk_vib, n_traject_alloc*nproc, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-!	  print*, myid, 'bk_vib_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
 	 
 	  CALL MPI_BCAST(bk_erre, n_traject_alloc*nproc, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-!	  print*, myid, 'bk_erre_done'
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
 	  
 	  CALL MPI_BCAST(bk_errp, n_traject_alloc*nproc, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-!	  print*, myid, 'bk_errp_done'   
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-!	  print *, 'gathered', myid
 ! Bikram End
-	 
-c	 !!! EROR
-      IF(myid.eq.0) THEN!!!! SEEKING FOR MAXIMUM VALUE
+!--------------------------------------------------------------------
+! Computing the maximum energy error and norm conservation error
+!--------------------------------------------------------------------	 
+      IF(myid.eq.0) THEN
       DO i=1,nproc
       IF(error_ener_largest(i_ener).lt.err_ener_larg(i)) THEN
       error_ener_largest(i_ener)=err_ener_larg(i)
@@ -995,7 +994,6 @@ c	 !!! EROR
       DO i=1,nproc
       IF(error_prb_largest(i_ener).lt.err_prb_larg(i)) THEN
       error_prb_largest(i_ener)=err_prb_larg(i)
-!      PRINT*,"i",i,err_prb_larg(i)	  
       err_proc_max_prb(i_ener) = i
       err_traj_max_prb(i_ener) = ERROR_INDEX_PROBAB(i)
       err_state_max_prb(i_ener) = s_st		  
@@ -1034,12 +1032,14 @@ c	 !!! EROR
       endif
 ! Bikram End
 	  
-      IF(calc_elast_defined) 	   ang_res_elast = ang_res_num	  
-      IF(calc_elast_defined .and. SPIN_FINE.ne.2) !!! RIGHT NOW FOR SPIN 1/2 NOT COMPUTE ELASTIC
-     & CALL ELAST_CALC(sigma_elast(s_st),ang_res_elast, !! CALC ELAST CROSS SECTION
+      IF(calc_elast_defined) ang_res_elast = ang_res_num	  
+      IF(calc_elast_defined .and. SPIN_FINE.ne.2) 						! RIGHT NOW FOR SPIN 1/2 NOT COMPUTE ELASTIC
+!--------------------------------------------------------------------
+! Computes Elastic integral and differential (if indicated) cross-section, 
+! prints deflection function, and phase
+!--------------------------------------------------------------------
+     & CALL ELAST_CALC(sigma_elast(s_st),ang_res_elast,
      & deflect_fun_defined,diff_cross_defined,number_of_channels)
-!       print *, myid, 'exited'
-!      sigma_elast = 0d0
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN
       IF(MYID.eq.0) CALL INELAST_CALC_FINE(sigma, !!! CALC INELASTIC CROSS SECTION
      & number_of_channels)	 
@@ -1047,16 +1047,24 @@ c	 !!! EROR
       PRINT*,	"INELASTIC CROSS SECTION CALCULATED FOR M", m_curr_f
       PRINT*, " "
       ENDIF	  
-      ELSE	  
-      IF(MYID.eq.0) CALL INELAST_CALC(sigma, !!! CALC INELASTIC CROSS SECTION
-     & number_of_channels)	 
+      ELSE
+!--------------------------------------------------------------------
+! Computes the inelastic opacity functions
+!--------------------------------------------------------------------
+      IF(MYID.eq.0) CALL INELAST_CALC(sigma, number_of_channels)	 
       IF(MYID.eq.0) THEN	 
-      PRINT*,	"INELASTIC CROSS SECTION CALCULATED FOR M", m_t
+      PRINT*, "INELASTIC CROSS SECTION CALCULATED FOR M", m_t
       PRINT*, " "
       ENDIF	  
-      ENDIF 	  
+      ENDIF
+!--------------------------------------------------------------------
+! Implements Billing's correction to cross-sections and changing units to Ang^2
+!--------------------------------------------------------------------
       DO j=1,number_of_channels
-      sigma(j) = sigma(j)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)    !!! BILLING CORRECTION    
+      sigma(j) = sigma(j)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)
+!--------------------------------------------------------------------
+! This is for idential colliding partners for inelastic cross-sections
+!--------------------------------------------------------------------
       IF(identical_particles_defined) THEN
       SELECT CASE(coll_type)
       CASE(5)       	  
@@ -1066,7 +1074,7 @@ c	 !!! EROR
       CASE(6)
         sigma(j) = sigma(j)*
      & (delta(j1_ch(chann_ini),j2_ch(chann_ini))
-     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))   !!! IDENTICAL PARTICLE CASE
+     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
      & +1d0)*
      & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
      & +1d0)	  
@@ -1079,8 +1087,14 @@ c	 !!! EROR
      & delta(ka1_ch(j),ka2_ch(j))*
      & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
       END SELECT     	 
-      ENDIF	 
+      ENDIF
+!--------------------------------------------------------------------
+! Converting unit of cross-sections A.U. to Ang^2
+!--------------------------------------------------------------------
       IF(j.eq.chann_ini) sigma(j) = sigma_elast(s_st)*a_bohr**2
+!--------------------------------------------------------------------
+! For identical colliding partners Elastic cross-sections
+!--------------------------------------------------------------------
       IF(identical_particles_defined.and.j.eq.chann_ini) THEN
       SELECT CASE(coll_type)	  
       CASE(5)       	  
@@ -1097,8 +1111,10 @@ c	 !!! EROR
      & delta(kc1_ch(j),kc2_ch(j))+1d0)/2d0
       END SELECT
       ENDIF	 
-      ENDDO	  
-!       IF(MYID.eq.0) PRINT*, "SIGMA_J_DEFINED",sigma(2) 
+      ENDDO
+!--------------------------------------------------------------------
+! Averaging over the initial m12 states
+!--------------------------------------------------------------------
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN
       DO i=1,number_of_channels	  
       sigma_f(i,i_ener)	 =  sigma_f(i,i_ener) +
@@ -1106,15 +1122,12 @@ c	 !!! EROR
      & /((j_max_ind(chann_ini)+j_min_ind(chann_ini)+2d0)  
      & *(j_max_ind(chann_ini)-j_min_ind(chann_ini)+1d0))  
       ENDDO	  
-      ELSE	  
+      ELSE
       DO i=1,number_of_channels	  
       sigma_f(i,i_ener)	 =  sigma_f(i,i_ener) +
      & sigma(i)*2d0/(1d0+delta(m_t,0))
      & /((j_max_ind(chann_ini)+j_min_ind(chann_ini)+1d0)  
      & *(j_max_ind(chann_ini)-j_min_ind(chann_ini)+1d0))
-!	  if(myid.eq.0) then
-!	  print *,i,j_max_ind(chann_ini),j_min_ind(chann_ini)
-!	  end if
       ENDDO
       ENDIF	  
       ENDIF	  
@@ -1122,8 +1135,10 @@ c	 !!! EROR
       ENDDO
       ENDDO
       ELSE
-      IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
-!!! MONTE CARLO CASE	  
+      IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"
+!--------------------------------------------------------------------
+! Setting up trajectories for Monte-Carlo case
+!--------------------------------------------------------------------  
       total_probab = 0d0
       sigma = 0d0
       probab_J = 0d0
@@ -1134,7 +1149,6 @@ c	 !!! EROR
       ampl_wf_imag = 0d0
       phase_wf = 0d0
       angle_scatter = 0d0
-	  
 ! Bikram Start:
 	  bk_tym = 0d0
 	  bk_prd = 0d0
@@ -1142,27 +1156,27 @@ c	 !!! EROR
 	  bk_erre = 0d0
 	  bk_errp = 0d0
 ! Bikram End.
-
       IF(myid.eq.0) PRINT*, "MONTE_CARLO INTEGRATION IS USED"	  
 
-! Bikram Start: Sept 2021, to implement AT-MQCT to Monte-CARLO
-!	  if(myid.eq.-11) then
+!--------------------------------------------------------------------
+! Checking if Monte-Carlo sampling already exists in the file
+!--------------------------------------------------------------------
 	  old_nmb_traj = 0
 	  total_traject_bikram = tot_number_of_traject
 	  mc_traj_file_exst = .false.
 	  inquire(file = 'Monte_Carlo_Initial_Conditions.dat', 
      & exist = mc_traj_file_exst)
 	  if(myid.eq.0 .and. .not. bikram_adiabatic) then	  
-	  
-! Bikram Start Dec 2021: Storing total #trajectories for
-! Monte-Carlo to sample inifnitely
+!--------------------------------------------------------------------
+! Decides how many trajectories still need to be computed
+!--------------------------------------------------------------------
       IF(b_impact_defined) THEN
       J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
-     & -j_max_ind(chann_ini)	  ! DB change 8/23
+     & -j_max_ind(chann_ini)	  														! DB change 8/23
       J_tot_min = 0
       ENDIF
-       J_DOWN_INT = J_tot_min
-       J_UP_INT  = 	J_tot_max
+      J_DOWN_INT = J_tot_min
+      J_UP_INT  = 	J_tot_max
       
       L_MAX_TRAJECT = J_tot_max+j_max_ind(chann_ini)
       L_MIN_TRAJECT = L_MAX_TRAJECT	  
@@ -1176,8 +1190,10 @@ c	 !!! EROR
       total_traject_bikram = min(tot_number_of_traject,
      & (L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)
 
+!--------------------------------------------------------------------
 ! Bikram Start Dec 2021: This is to read the trajectories 
-! that are calculated in the previous run.
+! that were calculated in the previous run.
+!--------------------------------------------------------------------
 	  mc_traj_file_exst = .false.
 	  inquire(file = 'Monte_Carlo_Initial_Conditions.dat', 
      & exist = mc_traj_file_exst)
@@ -1225,7 +1241,10 @@ c	 !!! EROR
      & action='write')
 	  end if
 ! Bikram End.
-	  
+!--------------------------------------------------------------------
+! Sampling of the initial conditions either new if this is the first run
+! or the remaining piece after the previous run if trajectories are added
+!-------------------------------------------------------------------- 
 	  do itraject = old_nmb_traj+1, tot_number_of_traject
  192  rand1 = rand0(idum)
       rand2 = rand0(idum)
@@ -1287,24 +1306,20 @@ c	 !!! EROR
 	  exit
 	  end if
 	  if(mc_same_traj) go to 192
-	  
+!--------------------------------------------------------------------
+! Creates new file with current sampling for possible future use
+!--------------------------------------------------------------------	  
 	  write(12,'(6(i6,2x),2(e19.12,2x))') j_t, m_t, p_monte_c, 
      & int(j12(s_st)), int(m12(s_st)), int(l_real),J_tot,dJ_int_range
 	  write(13,'(5(i6,2x))') s_st, int(l_real), int(J_tot),
      & int(m12(s_st)), int(j12(s_st))
-	  
-!	  if(itraject.ge.total_traject_bikram) then
-!	  reduce_nmb_traj = .true.
-!	  write(*,'(a,1x,a)')'The Monte-Carlo random sampling has reached'
-!     &,'maximum possible combination with current initial conditions.'
-!	  write(*,'(a,i0)')'Reducing total #trajectories = ', 
-!     & total_traject_bikram
-!	  exit
-!	  end if
 	  end do
 	  close(12)
 	  close(13)
 	  end if
+!--------------------------------------------------------------------
+! Sampling information is broadcasted
+!--------------------------------------------------------------------
 	  call mpi_bcast(total_traject_bikram, 1, mpi_integer, 0,
      & MPI_COMM_WORLD, ierr_mpi)
 	  call mpi_bcast(old_nmb_traj,1,mpi_integer,
@@ -1313,7 +1328,6 @@ c	 !!! EROR
      & reduce_nmb_traj = .true.
 	  tot_number_of_traject = total_traject_bikram
 	  call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!	  end if
 
 ! Bikram Start Dec 2021: Redistributing the trajectories among procs.
 	  if(reduce_nmb_traj) then
@@ -1340,14 +1354,11 @@ c	 !!! EROR
       allocate(probab_J(number_of_channels,n_traject_alloc))		  
       allocate(probab_J_all(number_of_channels,n_traject_alloc,nproc))
 	  end if
-	  
 ! Bikram End.
-	  
-!	  if(myid.eq.0) print*, 'traj_distribution_check'
-!	  call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!     CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  
-      DO itraject=st_traject,ntraject
+!--------------------------------------------------------------------
+! This is a loop over Monte-Carlo trajectories
+!--------------------------------------------------------------------
+      DO itraject = st_traject, ntraject
 	  
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots		
@@ -1385,40 +1396,10 @@ c	 !!! EROR
       ENDIF	 
 ! Bikram End.	  
 	  
-!      rand1 = rand0(idum)  !! RANDOMIZING AND SAMPLING
-!      rand2 = rand0(idum)
-!      rand_par = rand0(idum)
-!      p_monte_c  = p_lim_min	  
-!      IF(rand_par.gt.0.5) p_monte_c = p_lim_max	  
-!      rand_j = rand0(idum)	  
-!      rand_m = rand0(idum)
-!      rand_j = rand_j*(j_max_ind(chann_ini)+1d0-j_min_ind(chann_ini))
-!      j_t = int(rand_j)+j_min_ind(chann_ini)
-!      IF(rand_m.le.1d0/(2d0*j_t+1d0)) THEN
-!      m_t = 0
-!      ELSE
-!      rand_m = rand_m-1d0/(2d0*j_t+1d0)
-!      rand_m = rand_m*(2d0*j_t+1d0)/2d0
-!      m_t = int(rand_m) + 1 	  
-!      ENDIF
-!      IF(.not.identical_particles_defined) THEN
-!      s_st = indx_corr(m_t + j_t+1,
-!     & j_t+1,chann_ini) 
-!      ELSE
-!      s_st = indx_corr_id(p_monte_c,m_t + j_t+1,
-!     & j_t+1,chann_ini) 	  
-!      ENDIF
       IF(s_st.le.0) STOP "s_st NOT DEFINED PROPERLY"
-!	  write(*,'(7(i5,2x))')myid, itraject, st_traject, ntraject, 
-!     & j_t, m_t, s_st
-!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!      IF(myid.eq.0) PRINT*,"ITRAJECT =", itraject,s_st
-!      IF(myid.eq.0) PRINT*,"M12=", m_t
-!      IF(myid.eq.0) PRINT*,"J12=", j_t
 	  temp_t_bfr_dotrjct=MPI_Wtime()
 	    
-! Bikram Start: Reading probabilities for the trajectories in case of addition of Monte-Carlo case. 
-	  
+! Bikram Start: Reading probabilities for the trajectories in case of addition of trajectories
 	  if(mc_traj_file_exst) then
 	  if((ii-1).gt.old_nmb_traj) then
       CALL DOTRAJECT
@@ -1433,30 +1414,8 @@ c	 !!! EROR
 	  end if
 	  do j = 1, number_of_channels
 	  read(121,'(e19.12, 2x)',advance='no') probab(j)
-!	  write(*,'(e19.12, 2x)',advance='no') probab_bikram(j)
 	  end do
-!	  write(*,*)
-!	  do j = 1, number_of_channels
-!	  write(*,'(e19.12, 2x)',advance='no') probab(j)
-!	  end do
-!	  write(*,*)
-	  close(121)
-	  
-!      IF(mpi_task_defined) THEN
-!      DO i=1,traject_roots		
-!      IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	
-!	  open(121,file='Monte_Carlo_Opacity.out',action='read')
-	  
-!	  do ii = 1, (itraject-1)*traject_roots+i
-!	  DO j=1,number_of_channels
-!	  read(121,'(e19.12, 2x)',advance='no') probab_bikram(j)
-!	  end do
-!	  read(121,*)
-!	  end do
-!	  close(121)
-!      ENDIF	
-!      ENDDO		  
-!      ENDIF	  
+	  close(121)  
 	  end if
 	  
 	  else
@@ -1473,16 +1432,16 @@ c	 !!! EROR
      & int(m12(s_st)), ", L = ", int(l_real),
      & ", TIME_SPENT = ",t_prop," SEC."
       endif	 
-      CALL TIME_CHECKER(INTERUPT_PROPAGATION) !!! CHEKING IF WE SHOULD A STOP TRAJECTORY
+      CALL TIME_CHECKER(INTERUPT_PROPAGATION) 										! CHEKING IF WE SHOULD A STOP TRAJECTORY
       IF(INTERUPT_PROPAGATION) THEN
       id_trajec_mnt_crl = itraject	  
       EXIT
-      ENDIF	  
-!      IF(myid.eq.0) WRITE(*,'(a15,1x,i3)') "TRAJECTORY DONE",itraject	  
+      ENDIF
+!--------------------------------------------------------------------
+! Collects probabilities and error information from Monte-Carlo trajecotries
+!--------------------------------------------------------------------
       DO i=1,number_of_channels		  
       probab_J(i,itraject) = probab(i)
-!	  write(*,'(3(i0,1x),2(f12.5,1x))') 
-!     & myid,i,itraject,probab(i),probab_bikram(i)
       ENDDO
       IF(err_id_ener.lt.err_ener_tmp) THEN
       err_id_ener = err_ener_tmp
@@ -1493,11 +1452,10 @@ c	 !!! EROR
       err_id_prb = err_prb_tmp
       ERROR_INDEX_PROBAB(myid+1) = itraject
       num_traj_prb = itraject	  
-      ENDIF 	  
-!      WRITE(*,*) itraject,"err_id_prb,",err_id_prb	  
+      ENDIF
       ENDDO
 	  
-! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
+! Bikram Start August 2021: Monte-Carlo AT-MQCT Calculations
 	  if(bikram_save_traj) then
       write(bk_adia_dir1, '(a,a,f0.5)') 
      & trim(bk_directory), '/', U(i_ener)
@@ -1530,17 +1488,6 @@ c	 !!! EROR
       CALL MPI_GATHER(probab_J,task_size,MPI_DOUBLE_PRECISION,
      & probab_J_all,
      &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
-	  
-!	  if(myid.eq.0) then
-!	  do k = 1, nproc
-!	  do itraject = 1, n_traject_alloc
-!	  do j = 1, number_of_channels
-!	  write(*,'(e19.12, 2x)',advance='no')probab_J_all(j,itraject,k)
-!	  end do
-!	  write(*,*)
-!	  end do
-!	  end do
-!	  end if
 	 
 !!! GATHERING DATA   	 
       CALL MPI_GATHER(err_id_ener,1,MPI_DOUBLE_PRECISION,
@@ -1554,7 +1501,6 @@ c	 !!! EROR
      &  MPI_COMM_WORLD,ierr_mpi)
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       
-c	 !!! EROR
       IF(myid.eq.0) THEN
       DO i=1,nproc
       IF(error_ener_largest(i_ener).lt.err_ener_larg(i)) THEN
@@ -1574,7 +1520,7 @@ c	 !!! EROR
       ENDIF
       ENDDO		  
       ENDIF	
-!!!! EROR ASSIGNMENT	  
+ 
       DO j=1,ntraject
       DO i=1,number_of_channels	  
       IF(probab_J_all(i,j,myid+1).ne.probab_J(i,j)) THEN
@@ -1587,8 +1533,9 @@ c	 !!! EROR
       ENDDO	  
       ENDDO
 !      PRINT*, "BROADCASTING ENDED", myid
-
-!!!!!!      CHECKIN
+!--------------------------------------------------------------------
+! Computes mean value, and variance for Monte-Carlo sampling
+!--------------------------------------------------------------------
       i = 0
       IF(ALLOCATED(x2_mean_storage)) THEN
       DEALLOCATE(x2_mean_storage,x_mean_storage,
@@ -1782,12 +1729,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
 
       ENDIF
-
-	  
-      ENDIF	  
+      ENDIF
       ENDDO
-!!! INTEGRATOR ERRORS
-  
+	  
+	  if(check_point_defined .or. write_check_file_defined) 
+     & close(chk_file_unit)
+!--------------------------------------------------------------------
+! Finishing MPI task and printing trajecotry computing time
+!--------------------------------------------------------------------
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
       IF(MYID.eq.0)PRINT*,
      & "CROSS SECTION CALCULATED FOR ENERGY=",i_ener
@@ -1796,7 +1745,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  prop_time = prop_time_end - prop_time_bgn
 	  if(myid.eq.0) print*, "Trajectory Propagation Time:", prop_time
       IF(MYID.eq.0)PRINT*," "
-!      IF(MYID.eq.0)PRINT*,"sigma",sigma_f(2,1)	 
 
 ! Bikram Start:
 	  if(myid.eq.0) then
@@ -1823,15 +1771,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  close(1111)
 	  endif
 ! Bikram End.
-	   
-!      if(nmbr_of_enrgs.gt.1) CALL DEALLOCATE_ARRAYS 
+	  
       CALL DEALLOCATE_ARRAYS 
-!      IF(MYID.eq.0)PRINT*,"PROPOGATE DONE IN LOOP BEFORE BARR"		  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!      IF(MYID.eq.0)PRINT*,"PROPOGATE DONE IN LOOP"	  
       ENDDO
 	  return
-!      IF(MYID.eq.0)PRINT*,"PROPOGATE DONE"  
       END SUBROUTINE PROPAGATE
 
       SUBROUTINE DOTRAJECT
@@ -1844,7 +1788,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE MPI_TASK_TRAJECT
       USE MPI_DATA
       USE MPI		  
-	  use monte_carlo_sampling										!Bikram Sept 2021
+	  use monte_carlo_sampling																!Bikram Sept 2021
 	  use iso_fortran_env,only:output_unit
       IMPLICIT NONE
       LOGICAL BELONGS,fail_odeint
@@ -1865,9 +1809,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       REAL*8 r_offset,vel_cross(3)
       REAL*8 buffer_pot,der_buffer_pot,cos_def,buffer_eq
       REAL*8 Mjmr_cs	
-	  integer nmbr_r,nmbr_phi	  	!Bikram
-      REAL*8 tmp_R2,tmp_R1,bk_tmp_r,bk_tmp_phi,bk_vel			!(Bikram) 
-	  real*8 updated_R,updated_phi,f_time,int_1st_stp,bk_int_r		!(Bikram) 
+	  integer nmbr_r,nmbr_phi	  															!Bikram
+      REAL*8 tmp_R2,tmp_R1,bk_tmp_r,bk_tmp_phi,bk_vel				   						!(Bikram) 
+	  real*8 updated_R,updated_phi,f_time,int_1st_stp,bk_int_r		   						!(Bikram) 
 	  
       REAL*8 q_cartes(6),buffer_sp(6)	  
 !!! DELETE AFTER ALL	  
@@ -1876,7 +1820,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       EXTERNAL DERIVS,RK4,RKQS,ODEINT,DERIVS_CS,DERIVS_CS_IM,
      & DERIVS_MPI,DERIVS_MPI_CS,BSSTEP,derivs_BK
       CHARACTER(LEN=10) :: istate_word = "imagi_    "  
-      CHARACTER(LEN=10) :: rstate_word = "realp_    "	  ! DELETE AFTER ALL
+      CHARACTER(LEN=10) :: rstate_word = "realp_    "	  									! DELETE AFTER ALL
       CHARACTER(LEN=18) :: probab_out = "  _PROBAB_OUT_.out"
       CHARACTER(LEN=16) :: traject_out_file = "TRAJECTORY  .out"
 !Bikram Start August 2021:
@@ -1900,6 +1844,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  real*8 tol, bknorm, tau, v_temp, damp_coef, v_max, factor, tmp1
 	  real*8 bk_probab, i_max, kin_E, tmp2, tmp3, tmp4
 	  real*8, parameter :: pii = 4.0d0*atan(1.0d0)
+	  integer :: chk_file_unit = 123123
 	  integer stps, counter, stps_cntr, ph_cntr_bkk
 	  logical advnc_rk4, at_dir_exst
 	  external derivs_BK_adia
@@ -2141,14 +2086,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !   loops in case of orbiting
       loop_count = 0 
       ! IF(check_point_defined .and. .not. monte_carlo_defined .and. 
-     ! & i_ener.eq. i_curr ) THEN
+      ! & i_ener.eq. i_curr ) THEN
       ! state_ch = s_st-ini_st_check_file+1
       ! CALL TRAJ_ORB(INT(l_real),
-     ! & traj_ch,
-     ! & 1,
-     ! & dl_step_integ,
-     ! & ident_skip,
-     ! & L_MIN_TRAJECT)	  
+      ! & traj_ch,
+      ! & 1,
+      ! & dl_step_integ,
+      ! & ident_skip,
+      ! & L_MIN_TRAJECT)	  
       ! SELECT CASE(what_computed(state_ch,traj_ch ))	  
       ! CASE(1)
       ! sys_var = all_prob_l(1:sys_var_size,state_ch,traj_ch)
@@ -2174,23 +2119,23 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ! dt_corrected  = all_prob_l(sys_var_size+5,state_ch,traj_ch)
       ! dt_step  = all_prob_l(sys_var_size+6,state_ch,traj_ch)
       ! def_angle2 = deflect_angle + 2d0*acos(-1d0)*loop_count	  
-! !! REDEFINING ALL VALUES AGAIN	  
+      ! !! REDEFINING ALL VALUES AGAIN	  
       ! ort_r(1) = dcos(sys_var(5+states_size*2))
-     ! ^ *dsin(sys_var(3+states_size*2))
+      ! ^ *dsin(sys_var(3+states_size*2))
       ! ort_r(2) = dsin(sys_var(5+states_size*2))
-     ! ^ *sin(sys_var(3+states_size*2)) 
+      ! ^ *sin(sys_var(3+states_size*2)) 
       ! ort_r(3) = dcos(sys_var(3+states_size*2))
       ! ort_teta(1) = dcos(sys_var(5+states_size*2))
-     ! ^ *dcos(sys_var(3+states_size*2))
+      ! ^ *dcos(sys_var(3+states_size*2))
       ! ort_teta(2) = dsin(sys_var(5+states_size*2))*
-     ! ^ dcos(sys_var(3+states_size*2)) 
+      ! ^ dcos(sys_var(3+states_size*2)) 
       ! ort_teta(3) = -dsin(sys_var(3+states_size*2))
       ! ort_phi(1) = -dsin(sys_var(5+states_size*2))
-     ! % *dsin(sys_var(3+states_size*2))
+      ! % *dsin(sys_var(3+states_size*2))
       ! ort_phi(2) = dcos(sys_var(5+states_size*2))
-     ! $ *dsin(sys_var(3+states_size*2)) 
+      ! $ *dsin(sys_var(3+states_size*2)) 
       ! ort_phi(3) =0d0
-! ! THE PROGRAM COPIES CLASSICAL VARIABLES FROM "sys_var" FOR FURTHER USE 	  
+      ! ! THE PROGRAM COPIES CLASSICAL VARIABLES FROM "sys_var" FOR FURTHER USE 	  
       ! R =  sys_var(1+states_size*2)
       ! pr =  sys_var(2+states_size*2)
       ! ql = sys_var(3+states_size*2)
@@ -3363,16 +3308,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram start Oct 2019:
 	  
 	  if(bikram_int) tcur=f_time
+	  if(.not. check_point_defined) then
 	  R =  sys_var(1+states_size*2)
       pr =  sys_var(2+states_size*2)
       ql = sys_var(3+states_size*2)
       l = sys_var(4+states_size*2)
       phi = sys_var(5+states_size*2)
       qphi = sys_var(6+states_size*2)
-!	  print *, 'chk2', myid, l_real  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  	  !!!
+
 ! "Eqf" - THE QUANTUM ENERGY DURING THE COLLISION	  
       Eqf = 0d0	  
       DO i = st_sum_rn_min,st_sum_rn_max
@@ -3467,9 +3410,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
       ENDIF
       ENDIF	    
-!	  print *, 'chk4', myid, l_real  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 ! Bikram Start May 2020:	
 	  if(bikram_save_traj .and. .not. bk_b_chk) then 
 	  write(100003) tcur+dt,
@@ -3493,12 +3433,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       P_total=P_total+(sys_var(i)**2+sys_var(i+states_size)**2)
       ENDDO
       IF(current_error.lt. abs(1d0 - P_total)) current_error
-     &	  = abs(1d0 - P_total)	  
-!	  print *, 'prob', myid, l_real, P_total
-! Bikram End:
-!	  print *, 'chk5', myid, l_real  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+     &	  = abs(1d0 - P_total)	
 ! COMPUTING FINAL VELOCITY	  
       DO i=1,3
       velocity_fin(i) = ort_r(i)*pr/massAB_M+(
@@ -3507,9 +3442,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
       probab = 0d0
       P_total = 0d0
-! COMPUTING OPACITIES ( ARRAY "probab" WHICH SIZE IS THE NUMBER OF CHANNELS)	  
-!	  write(*,'(a,2x,4(i0,2x))')'Traj_info', int(i_ener), 
-!     & int(j12(s_st)), int(m12(s_st)), int(l_real)
+! COMPUTING OPACITIES ( ARRAY "probab" WHICH SIZE IS THE NUMBER OF CHANNELS)
       DO i = 1,states_size
       chann_num = indx_chann(i)
       IF(chann_num.gt.number_of_channels .and. myid.eq.0)
@@ -3520,8 +3453,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       probab(chann_num) =	probab(chann_num) 
      &		+ (sys_var(i)**2+sys_var(i+states_size)**2)*
      & (2d0*J_tot + 1d0)/k_vec**2
-!	  write(*,'(2(i4,2x),2(e19.12,2x))') i, chann_num, 
-!     & sys_var(i), sys_var(i+states_size)
       ELSE
       probab(chann_num) =	probab(chann_num) 
      &		+ (sys_var(i)**2+sys_var(i+states_size)**2)
@@ -3529,11 +3460,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! "P_total" MUST BE 1. HOWEVER, THERE IS A PROPAGATION ERROR	 
       P_total=P_total+(sys_var(i)**2+sys_var(i+states_size)**2)
       ENDDO	
-	  
-	  do i = 1, size(probab)
-!	  print*, i, probab(i),P_total
-	  end do
-!	  print*,'prop_done'
 	  
 ! Bikram Start:
 !      print *, 'chk6', myid, l_real  
@@ -3553,7 +3479,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       err_ener_tmp = eror/E_sct*1d2
 	  
 ! Bikram start Oct 2019:
-
       IF(prn_l_defined) THEN
       IF(fine_structure_defined .and. SPIN_FINE.eq.2)STOP "NOT READY"	  
       IF(int(l_real).eq.prn_l_trj .and.
@@ -3590,9 +3515,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       CLOSE(3453)	  
       ENDIF
       ENDIF	  
-!      print *, 'chk7', myid, l_real  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 ! Bikram End
       IF(monte_carlo_defined) RETURN	  
 ! "ampl_wf_real" AND "ampl_wf_imag" - REAL and IMAGINARY PART OF AMPLITUDE	 
@@ -3639,20 +3561,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       CLOSE(23)	  
       ENDIF
-!	  print *, 'chk8', myid, l_real  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
-!	  write(*,'(9(i0,1x),7(f12.5,1x))') myid,s_st,
-!     & ini_st_check_file,itraject,i_ener,size(TRAJECT_END_DATA,1),
-!     & size(TRAJECT_END_DATA,2),size(TRAJECT_END_DATA,3),
-!     & size(TRAJECT_END_DATA,4),
-!     & l_orb/k_vec,l_real,R,phi,
-!     & sys_var(s_st)**2+sys_var(s_st+states_size)**2,
-!     & err_ener_tmp,err_prb_tmp
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 !!!   SAVING TRAJECTORY ENDS
       ds_state = s_st-ini_st_check_file+1
       TRAJECT_END_DATA(1,itraject,ds_state,i_ener) = l_orb/k_vec
@@ -3663,10 +3572,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & sys_var(s_st)**2+sys_var(s_st+states_size)**2
       TRAJECT_END_DATA(6,itraject,ds_state,i_ener) = err_ener_tmp
       TRAJECT_END_DATA(7,itraject,ds_state,i_ener) = err_prb_tmp	
-!!!	  
-!	  print *, 'chk9', myid, orbit_traj_defined  
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+
       IF(orbit_traj_defined) THEN
 !      OPEN(2345,FILE="ORBITING_TRAJECTORY.out",POSiTION="APPEND")
 
@@ -3718,9 +3624,63 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 
 !!!! TESTING MERELY  
       ENDIF
-!	  print*, 'traj_finished', myid, l_real 
-!	  call flush(output_unit)
-!	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+
+!--------------------------------------------------------------------
+! printing trajectory end information to checkpoint files
+!--------------------------------------------------------------------
+	  if(write_check_file_defined) then
+	  write(chk_file_unit) tcur
+	  do i = 1, 6
+	  write(chk_file_unit) sys_var(i+states_size*2)
+	  end do
+	  
+	  do i = 1, number_of_channels
+	  write(chk_file_unit) probab(i)
+	  end do
+	  
+      if(monte_carlo_defined) return 
+      
+	  write(chk_file_unit) ampl_wf_real(itraject,myid+1), 
+     & ampl_wf_imag(itraject,myid+1), phase_wf(itraject,myid+1),
+     & angle_scatter(itraject,myid+1), angle_phase(itraject,myid+1),
+     & bk_tym(itraject,myid+1), bk_prd(itraject,myid+1),
+     & bk_vib(itraject,myid+1), bk_erre(itraject,myid+1),
+     & bk_errp(itraject,myid+1),
+     & sys_var(s_st), sys_var(s_st+states_size)
+	  end if
+	  end if
+
+!--------------------------------------------------------------------
+! reading trajectory end information from checkpoint 
+! files as RESTART = YES indicated
+!--------------------------------------------------------------------
+	  if(check_point_defined) then
+	  read(chk_file_unit) tcur
+	  do i = 1, 6
+	  read(chk_file_unit) sys_var(i+states_size*2)
+	  end do  
+	  R =  sys_var(1+states_size*2)
+      pr =  sys_var(2+states_size*2)
+      ql = sys_var(3+states_size*2)
+      l = sys_var(4+states_size*2)
+      phi = sys_var(5+states_size*2)
+      qphi = sys_var(6+states_size*2)
+	  
+	  do i = 1, number_of_channels
+	  read(chk_file_unit) probab(i)
+	  end do
+	  
+      if(monte_carlo_defined) return 
+      
+	  read(chk_file_unit) ampl_wf_real(itraject,myid+1), 
+     & ampl_wf_imag(itraject,myid+1), phase_wf(itraject,myid+1),
+     & angle_scatter(itraject,myid+1), angle_phase(itraject,myid+1),
+     & bk_tym(itraject,myid+1), bk_prd(itraject,myid+1),
+     & bk_vib(itraject,myid+1), bk_erre(itraject,myid+1),
+     & bk_errp(itraject,myid+1),
+     & sys_var(s_st), sys_var(s_st+states_size)
+	  end if
+
       RETURN
       	  
       END SUBROUTINE DOTRAJECT
@@ -3794,9 +3754,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF
 	  
       CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
-     & ,n_r_coll,x,y,y_prime)     
-  
+     & ,n_r_coll,x,y,y_prime)
 
+!--------------------------------------------------------------------
+! Shifting matrix elements using the last value of R
+!--------------------------------------------------------------------
       Mjmr = y - Mat_el(n_r_coll,k_real)
       END FUNCTION Mjmr
 	  
