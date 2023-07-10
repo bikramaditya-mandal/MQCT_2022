@@ -4205,6 +4205,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       END SELECT
       ENDDO	
 	  
+	  if(expansion_defined) terms_file_defined = .true.						!Bikram 
       END SUBROUTINE POTENTIAL_PARSING
       SUBROUTINE KEY_WORD_POTENTIAL(inp,length,key_word_used,key,place)
       IMPLICIT NONE 															!!! KEY WORDS FOR POTENTIAL
@@ -4212,7 +4213,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp
-      CHARACTER(LEN=10) :: expan_word="EXPANSION="         						!CASE(1)
+      CHARACTER(LEN=15) :: expan_word="READ_EXPANSION="         				!CASE(1)
       CHARACTER(LEN=8) :: energy_units_word="E_UNITS="     						!CASE(2) CM-1 ,A.U. KCAL, KLVN
       CHARACTER(LEN=8) :: r_units_word="R_UNITS="          						!CASE(3) A.U., ANGS
       CHARACTER(LEN=10) :: nmb_terms_word="NMB_TERMS="     						!CASE(4)
@@ -4267,8 +4268,8 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       CHARACTER(LEN=9)	:: bk_axl_sym2 = "AXL_SYM2="							!CASE(53) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym1 = "EQU_SYM1="							!CASE(54) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym2 = "EQU_SYM2="							!CASE(55) 	   		!Bikram Sep 2022
-      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE="							!CASE(56) 	   		!Bikram Oct 2022
-      CHARACTER(LEN=12)	:: bk_reblnc_comp = "REBLNC_COMP="						!CASE(57) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE ="							!CASE(56) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=12)	:: bk_reblnc_comp = "BALANCED_MIJ="						!CASE(57) 	   		!Bikram Oct 2022
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
